@@ -1,9 +1,18 @@
 import ast
+import json
+import os
 import time
 from datetime import datetime, timedelta
+from typing import Any
 
+import dotenv
 import numpy as np
 import pandas as pd
+from smolagents import (
+    OpenAIServerModel,
+    ToolCallingAgent,
+    tool,
+)
 from sqlalchemy import Engine, create_engine
 from sqlalchemy.sql import text
 
@@ -317,6 +326,7 @@ def init_database(db_engine: Engine, seed: int = 137) -> Engine:
         raise
 
 
+@tool
 def create_transaction(
     item_name: str,
     transaction_type: str,
@@ -412,7 +422,7 @@ def get_all_inventory(as_of_date: str) -> dict[str, int]:
     # Convert the result into a dictionary {item_name: stock}
     return dict(zip(result["item_name"], result["stock"]))
 
-
+@tool
 def get_stock_level(item_name: str, as_of_date: str | datetime) -> pd.DataFrame:
     """
     Retrieve the stock level of a specific item as of a given date.
@@ -451,8 +461,30 @@ def get_stock_level(item_name: str, as_of_date: str | datetime) -> pd.DataFrame:
         db_engine,
         params={"item_name": item_name, "as_of_date": as_of_date},
     )
+@tool
+def get_min_stock_level(item_name: str) -> int:
+    """
+    Retrieve the minimum stock level for a specific item.
 
+    Args:
+        item_name (str): The name of the item to look up.
 
+    Returns:
+        int: The minimum stock level for the item.
+    """
+    inventory_df = pd.read_sql(
+    "SELECT min_stock_level FROM inventory WHERE item_name = :item_name",
+    db_engine,
+    params={"item_name": item_name},
+)
+
+    if inventory_df.empty:
+        raise ValueError(f"Item not found: {item_name}")
+
+    min_stock = int(inventory_df["min_stock_level"].iloc[0])
+    return min_stock
+
+@tool
 def get_supplier_delivery_date(input_date_str: str, quantity: int) -> str:
     """
     Estimate the supplier delivery date based on the requested order quantity and a starting date.
@@ -502,6 +534,7 @@ def get_supplier_delivery_date(input_date_str: str, quantity: int) -> str:
     return delivery_date_dt.strftime("%Y-%m-%d")
 
 
+@tool
 def get_cash_balance(as_of_date: str | datetime) -> float:
     """
     Calculate the current cash balance as of a specified date.
@@ -544,6 +577,7 @@ def get_cash_balance(as_of_date: str | datetime) -> float:
         return 0.0
 
 
+@tool
 def generate_financial_report(as_of_date: str | datetime) -> dict:
     """
     Generate a complete financial report for the company as of a specific date.
@@ -617,6 +651,7 @@ def generate_financial_report(as_of_date: str | datetime) -> dict:
     }
 
 
+@tool
 def search_quote_history(search_terms: list[str], limit: int = 5) -> list[dict]:
     """
     Retrieve a list of historical quotes that match any of the provided search terms.
@@ -691,19 +726,353 @@ def search_quote_history(search_terms: list[str], limit: int = 5) -> list[dict]:
 
 """Set up tools for your agents to use, these should be methods that combine the database functions above
  and apply criteria to them to ensure that the flow of the system is correct."""
+dotenv.load_dotenv(dotenv_path="../.env")
+openai_api_key = os.getenv("UDACITY_OPENAI_API_KEY")
+model = OpenAIServerModel(
+    model_id="gpt-4o-mini",
+    api_base="https://openai.vocareum.com/v1",
+    api_key=openai_api_key,
+)
 
 
 # Tools for inventory agent
+def item_exists(item_name: str) -> bool:
+    """Check if an item exists in the inventory.
+
+    Args:
+        item_name (str): The name of the item to check.
+
+    Returns:
+        bool: True if the item exists, False otherwise.
+    """
+    matches = pd.read_sql(
+        "SELECT 1 FROM inventory WHERE item_name = :item_name LIMIT 1",
+        db_engine,
+        params={"item_name": item_name},
+    )
+    return not matches.empty
+
+
+@tool
+def get_stock_inventory(
+    as_of_date: str, item_name: str, quantity: int
+) -> dict[str, Any]:
+    """Check if the specified quantity of an item is available in inventory.
+
+    Args:
+        as_of_date (str): The date to check inventory for, in YYYY-MM-DD format.
+        item_name (str): The name of the item to check.
+        quantity (int): The quantity to check for.
+
+    Returns:
+        dict[str, Any]: A dictionary containing the item name, whether it exists, the requested quantity, the current stock level, whether there is enough stock, the shortage, and the delivery date.
+    """
+    if quantity <= 0:
+        raise ValueError("Quantity must be greater than zero.")
+    if not item_exists(item_name):
+        return {"item_name": item_name, "item_exists": False}
+    stock_df = get_stock_level(as_of_date, item_name)
+    current_stock = stock_df["current_stock"].iloc[0]
+    shortage = max(0, quantity - current_stock)
+
+    delivery_date = None
+    if shortage > 0:
+        delivery_date = get_supplier_delivery_date(as_of_date, item_name)
+
+    return {
+        "item_name": item_name,
+        "item_exists": True,
+        "requested_quantity": quantity,
+        "current_stock": current_stock,
+        "enough_stock": shortage == 0,
+        "shortage": shortage,
+        "delivery_date": delivery_date,
+    }
 
 
 # Tools for quoting agent
 
-
 # Tools for ordering agent
+@tool
+def reorder_item(item_name: str, quantity: int) -> dict[str, Any]:
+    """Reorder an item from the supplier.
+
+    Args:
+        item_name (str): The name of the item to reorder.
+        quantity (int): The quantity to reorder.
+
+    Returns:
+        dict[str, Any]: A dictionary containing the item name, the reordered quantity, and the expected delivery date.
+    """
+    # get stock level before reordering
+    stock_df = get_stock_level(pd.Timestamp.now().strftime("%Y-%m-%d"), item_name)
+    current_stock = stock_df["current_stock"].iloc[0]
+    # get the minimal stock
+    min_stock = get_min_stock_level(pd.Timestamp.now().strftime("%Y-%m-%d"), item_name)
+    if quantity <= 0:
+        raise ValueError("Quantity must be greater than zero.")
+    if current_stock + quantity < min_stock:
+        delivery_date = get_supplier_delivery_date(pd.Timestamp.now().strftime("%Y-%m-%d"), item_name)
+        return {
+            "item_name": item_name,
+            "reordered_quantity": quantity,
+            "delivery_date": delivery_date,
+        }
+    return {
+        "item_name": item_name,
+        "reordered_quantity": 0,
+        "delivery_date": None,
+    }
+
+# Set up your agents and create an orchestration agent that will manage them
+class RequestProcessorAgent(ToolCallingAgent):
+    """Agent responsible for processing requests."""
+
+    def __init__(self, model):
+        super().__init__(
+            tools=[],
+            model=model,
+            name="request_processor_agent",
+            description="Agent responsible for processing requests and delegating them to the appropriate agents.",
+        )
 
 
-# Set up your agents and create an orchestration agent that will manage them.
+class InventoryAgent(ToolCallingAgent):
+    """Agent responsible for managing inventory."""
 
+    def __init__(self, model):
+        super().__init__(
+            tools=[get_stock_inventory, get_min_stock_level, create_transaction],
+            model=model,
+            name="inventory_agent",
+            description="Agent responsible for managing inventory. Checks stock levels and reorders items when necessary.",
+        )
+
+
+class QuoteAgent(ToolCallingAgent):
+    """Agent responsible for handling quote requests."""
+
+    def __init__(self, model):
+        super().__init__(
+            tools=[
+                search_quote_history,
+                get_stock_inventory,
+                get_cash_balance,
+                generate_financial_report,
+            ],
+            model=model,
+            name="quote_agent",
+            description="Agent responsible for handling quote requests. Checks stock levels and generates quotes.",
+        )
+
+
+class OrderAgent(ToolCallingAgent):
+    """Agent responsible for handling orders."""
+
+    def __init__(self, model):
+        super().__init__(
+            tools=[
+                reorder_item,
+                create_transaction,
+            ],
+            model=model,
+            name="order_agent",
+            description="Agent responsible for creating transactions for orders.",
+        )
+
+
+class OrchestrationAgent(ToolCallingAgent):
+    """Agent responsible for orchestrating the interactions between other agents."""
+
+    def __init__(self, model):
+
+        self.request_processor_agent = RequestProcessorAgent(model)
+        self.inventory_agent = InventoryAgent(model)
+        self.quote_agent = QuoteAgent(model)
+        self.order_agent = OrderAgent(model)
+
+        @tool
+        def process_request(self, request):
+            """Process customer order information to extract details.
+
+            Args:
+                request: The customer's order request
+
+            Returns:
+                Processed request information with item_name, quantity, order_date, job, and event.
+            """
+            response = self.request_processor_agent.run(f"""
+                The customer says: "{request}"
+
+                First, identify:
+                1. What items they want
+                2. what size they want small large or medium
+                3. for what event they are ordering
+                4. the job of the customer
+
+                return the extracted information as a structured response containing item_name, quantity, order_date, job, and event.
+                """)
+            data = json.loads(response)
+            if not isinstance(data, dict):
+                raise TypeError("Invalid response format")
+            if (
+                "item_name" not in data
+                or "quantity" not in data
+                or "order_date" not in data
+                or "job" not in data
+                or "event" not in data
+            ):
+                raise ValueError("Missing required fields in response")
+            return data
+
+        @tool
+        def check_inventory(self, request_information):
+            """Check the inventory for the requested items.
+
+            Args:
+                request_information: Processed request information containing item_name and quantity.
+
+            Returns:
+                Inventory status for the requested items.
+            """
+            response = self.inventory_agent.run(f"""
+                The customer wants: "{request_information}"
+
+                Check if the requested items are available in the inventory.
+                Return the inventory status as a structured response containing item name, whether it exists, the requested quantity, the current stock level, whether there is enough stock, the shortage, and the delivery date.
+                """)
+            data = json.loads(response)
+            if not isinstance(data, dict):
+                raise TypeError("Invalid response format")
+            if (
+                "item_name" not in data
+                or "exists" not in data
+                or "requested_quantity" not in data
+                or "current_stock" not in data
+                or "enough_stock" not in data
+                or "shortage" not in data
+                or "delivery_date" not in data
+            ):
+                raise ValueError("Missing required fields in response")
+            return data
+
+        @tool
+        def get_pricing(
+            request_information
+        ):
+            """Get the pricing for the requested items.
+
+            Args:
+                request_information: Processed request information containing item_name and quantity.
+
+            Returns:
+                Pricing information for the requested items.
+            """
+            response = self.quote_agent.run(f"""
+                The customer wants: "{request_information}"
+
+                Get the pricing for the requested items.
+                Return the pricing information as a structured response containing item_name, requested_quantity, discount, and total_price.
+                """)
+            data = json.loads(response)
+            if not isinstance(data, dict):
+                raise TypeError("Invalid response format")
+            if (
+                "item_name" not in data
+                or "requested_quantity" not in data
+                or "discount" not in data
+                or "total_price" not in data
+            ):
+                raise ValueError("Missing required fields in response")
+            return data
+
+        @tool
+        def finalize_order(
+            request_information
+        ):
+            """Fulfill the order for the requested items.
+
+            Args:
+                request_information: Processed request information containing item_name and quantity.
+
+            Returns:
+                Confirmation of the order fulfillment.
+            """
+            response = self.order_agent.run(f"""
+                The customer wants: "{request_information}"
+
+                Fulfill the order for the requested items.
+                using the create_transaction for recording the order transaction.
+                then check if the stock needs to be reordered using the reorder_item tool.
+                if it needs to be reordered, use the create_transaction tool to record the reorder transaction.
+                When reordering the stock use the appropriate 'stock_orders' transaction_type.
+                when recording the sell order transaction use the appropriate 'sales' transaction_type.
+                Return the confirmation as a structured response containing item_name, requested_quantity, transaction_type, and status.
+                """)
+            data = json.loads(response)
+            if not isinstance(data, dict):
+                raise TypeError("Invalid response format")
+            if (
+                "item_name" not in data
+                or "requested_quantity" not in data
+                or "transaction_type" not in data
+                or "status" not in data
+            ):
+                raise ValueError("Missing required fields in response")
+            return data
+
+        @tool
+        def reorder_stock(
+            item_name,
+            quantity
+        ):
+            """Reorder stock for the specified item.
+
+            Args:
+                item_name: Name of the item to reorder.
+                quantity: Quantity needed by the customer.
+
+            Returns:
+                Confirmation of the reorder.
+            """
+            response = self.order_agent.run(f"""
+                check if the following item: "{item_name}" with quantity: "{quantity}" needs to be reordered.
+                1) first get the minimum stock level for the item.
+                2) then compare it with the current quantity to determine if reordering is necessary.
+                3) if reordering is necessary, place the order for the required quantity.
+
+                Return the confirmation as a structured response containing item_name, requested_quantity, and status.
+                """)
+
+            data = json.loads(response)
+            if not isinstance(data, dict):
+                raise TypeError("Invalid response format")
+            if (
+                "item_name" not in data
+                or "requested_quantity" not in data
+                or "status" not in data
+            ):
+                raise ValueError("Missing required fields in response")
+            return data
+
+        super().__init__(
+            tools=[process_request, get_pricing, finalize_order],
+            model=model,
+            name="orchestration_agent",
+            description="Agent responsible for orchestrating the interactions between other agents.",
+        )
+    def handle_request(self, request_with_date):
+        return self.run(f"""
+            The customer wants: "{request_with_date}"
+
+            Process the request and provide the necessary actions.
+            first use the process_request tool to handle the request.
+            then use check_inventory tool to verify item availability.
+            after that call the get_pricing tool to obtain pricing information.
+            finally use the finalize_order tool to complete the order.
+            finalizing the order will involve confirming the transaction and updating the inventory accordingly.
+            return a summary of all actions taken.
+            """)
 
 # Run your test scenarios by writing them here. Make sure to keep track of them.
 
@@ -758,7 +1127,7 @@ def run_test_scenarios():
         ############
         ############
 
-        # response = call_your_multi_agent_system(request_with_date)
+         response = self.handle_request(request_with_date)
 
         # Update state
         report = generate_financial_report(request_date)
