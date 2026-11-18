@@ -823,6 +823,28 @@ def reorder_item(item_name: str, quantity: int, as_of_date: str) -> dict[str, An
 
 
 # Set up your agents and create an orchestration agent that will manage them
+def parse_agent_response(response: Any) -> dict[str, Any]:
+    """Normalize an agent response into a structured dictionary."""
+    if isinstance(response, str):
+        try:
+            data = json.loads(response)
+        except json.JSONDecodeError as json_error:
+            python_literal = (
+                response.replace("null", "None")
+                .replace("true", "True")
+                .replace("false", "False")
+            )
+            try:
+                data = ast.literal_eval(python_literal)
+            except (SyntaxError, ValueError):
+                raise json_error
+    else:
+        data = response
+    if not isinstance(data, dict):
+        raise TypeError("Invalid response format")
+    return data
+
+
 class RequestProcessorAgent(ToolCallingAgent):
     """Agent responsible for processing requests."""
 
@@ -910,9 +932,7 @@ class OrchestrationAgent(ToolCallingAgent):
 
                 return the extracted information as a structured response containing item_name, quantity, order_date, job, and event.
                 """)
-            data = json.loads(response)
-            if not isinstance(data, dict):
-                raise TypeError("Invalid response format")
+            data = parse_agent_response(response)
             if (
                 "item_name" not in data
                 or "quantity" not in data
@@ -937,11 +957,10 @@ class OrchestrationAgent(ToolCallingAgent):
                 The customer wants: "{request_information}"
 
                 Check if the requested items are available in the inventory.
-                Return the inventory status as a structured response containing item name, whether it exists, the requested quantity, the current stock level, whether there is enough stock, the shortage, and the delivery date.
+                Return only valid JSON with item_name, exists, requested_quantity, current_stock, enough_stock, shortage, and delivery_date.
+                Use double quotes, JSON booleans, and null where appropriate.
                 """)
-            data = json.loads(response)
-            if not isinstance(data, dict):
-                raise TypeError("Invalid response format")
+            data = parse_agent_response(response)
             if (
                 "item_name" not in data
                 or "exists" not in data
@@ -968,11 +987,10 @@ class OrchestrationAgent(ToolCallingAgent):
                 The customer wants: "{request_information}"
 
                 Get the pricing for the requested items.
-                Return the pricing information as a structured response containing item_name, requested_quantity, discount, and total_price.
+                Return only valid JSON with item_name, requested_quantity, discount, and total_price.
+                Use double quotes around all keys and string values.
                 """)
-            data = json.loads(response)
-            if not isinstance(data, dict):
-                raise TypeError("Invalid response format")
+            data = parse_agent_response(response)
             if (
                 "item_name" not in data
                 or "requested_quantity" not in data
@@ -1001,46 +1019,14 @@ class OrchestrationAgent(ToolCallingAgent):
                 if it needs to be reordered, use the create_transaction tool to record the reorder transaction.
                 When reordering the stock use the appropriate 'stock_orders' transaction_type.
                 when recording the sell order transaction use the appropriate 'sales' transaction_type.
-                Return the confirmation as a structured response containing item_name, requested_quantity, transaction_type, and status.
+                Return only valid JSON with item_name, requested_quantity, transaction_type, and status.
+                Use double quotes around all keys and string values.
                 """)
-            data = json.loads(response)
-            if not isinstance(data, dict):
-                raise TypeError("Invalid response format")
+            data = parse_agent_response(response)
             if (
                 "item_name" not in data
                 or "requested_quantity" not in data
                 or "transaction_type" not in data
-                or "status" not in data
-            ):
-                raise ValueError("Missing required fields in response")
-            return data
-
-        @tool
-        def reorder_stock(item_name: str, quantity: int) -> dict[str, Any]:
-            """Reorder stock for the specified item.
-
-            Args:
-                item_name: Name of the item to reorder.
-                quantity: Quantity needed by the customer.
-
-            Returns:
-                Confirmation of the reorder.
-            """
-            response = self.order_agent.run(f"""
-                check if the following item: "{item_name}" with quantity: "{quantity}" needs to be reordered.
-                1) first get the minimum stock level for the item.
-                2) then compare it with the current quantity to determine if reordering is necessary.
-                3) if reordering is necessary, place the order for the required quantity.
-
-                Return the confirmation as a structured response containing item_name, requested_quantity, and status.
-                """)
-
-            data = json.loads(response)
-            if not isinstance(data, dict):
-                raise TypeError("Invalid response format")
-            if (
-                "item_name" not in data
-                or "requested_quantity" not in data
                 or "status" not in data
             ):
                 raise ValueError("Missing required fields in response")
@@ -1052,7 +1038,6 @@ class OrchestrationAgent(ToolCallingAgent):
                 check_inventory,
                 get_pricing,
                 finalize_order,
-                reorder_stock,
             ],
             model=model,
             name="orchestration_agent",

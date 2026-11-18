@@ -1,4 +1,5 @@
 import json
+import os
 import sys
 import unittest
 from datetime import datetime
@@ -7,6 +8,7 @@ from unittest.mock import Mock, patch
 
 import pandas as pd
 from sqlalchemy import create_engine, text
+from sqlalchemy.pool import StaticPool
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -16,11 +18,16 @@ import project_starter as project
 class WorkflowTests(unittest.TestCase):
     def setUp(self):
         self.original_engine = project.db_engine
-        self.engine = create_engine("sqlite:///:memory:")
+        self.engine = create_engine(
+            "sqlite:///:memory:",
+            connect_args={"check_same_thread": False},
+            poolclass=StaticPool,
+        )
         project.db_engine = self.engine
 
         with self.engine.begin() as conn:
-            conn.execute(text("""
+            conn.execute(
+                text("""
                 CREATE TABLE transactions (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     item_name TEXT,
@@ -29,8 +36,10 @@ class WorkflowTests(unittest.TestCase):
                     price REAL,
                     transaction_date TEXT
                 )
-            """))
-            conn.execute(text("""
+            """)
+            )
+            conn.execute(
+                text("""
                 CREATE TABLE inventory (
                     item_name TEXT,
                     category TEXT,
@@ -38,11 +47,15 @@ class WorkflowTests(unittest.TestCase):
                     current_stock INTEGER,
                     min_stock_level INTEGER
                 )
-            """))
-            conn.execute(text("""
+            """)
+            )
+            conn.execute(
+                text("""
                 CREATE TABLE quote_requests (id INTEGER, response TEXT)
-            """))
-            conn.execute(text("""
+            """)
+            )
+            conn.execute(
+                text("""
                 CREATE TABLE quotes (
                     request_id INTEGER,
                     total_amount REAL,
@@ -52,25 +65,33 @@ class WorkflowTests(unittest.TestCase):
                     event_type TEXT,
                     order_date TEXT
                 )
-            """))
-            conn.execute(text("""
+            """)
+            )
+            conn.execute(
+                text("""
                 INSERT INTO inventory
                     (item_name, category, unit_price, current_stock, min_stock_level)
                 VALUES ('A4 paper', 'paper', 0.05, 5, 2)
-            """))
-            conn.execute(text("""
+            """)
+            )
+            conn.execute(
+                text("""
                 INSERT INTO transactions
                     (item_name, transaction_type, units, price, transaction_date)
                 VALUES
                     ('A4 paper', 'stock_orders', 5, 0.25, '2025-01-01'),
                     ('A4 paper', 'sales', 2, 0.20, '2025-01-01'),
                     ('A4 paper', 'sales', 1, 0.10, '2025-01-02')
-            """))
-            conn.execute(text("""
+            """)
+            )
+            conn.execute(
+                text("""
                 INSERT INTO quote_requests (id, response)
                 VALUES (1, 'A4 paper for an office')
-            """))
-            conn.execute(text("""
+            """)
+            )
+            conn.execute(
+                text("""
                 INSERT INTO quotes (
                     request_id, total_amount, quote_explanation, job_type,
                     order_size, event_type, order_date
@@ -79,7 +100,8 @@ class WorkflowTests(unittest.TestCase):
                     1, 10.0, 'A4 paper quote', 'office manager',
                     'small', 'meeting', '2025-01-01'
                 )
-            """))
+            """)
+            )
 
     def tearDown(self):
         project.db_engine = self.original_engine
@@ -91,8 +113,11 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(project.get_all_inventory("2025-01-01"), {"A4 paper": 3})
         self.assertAlmostEqual(project.get_cash_balance("2025-01-01"), -0.05)
         self.assertEqual(
-            int(project.get_stock_level("A4 paper", "2025-01-02")
-                ["current_stock"].iloc[0]),
+            int(
+                project.get_stock_level("A4 paper", "2025-01-02")["current_stock"].iloc[
+                    0
+                ]
+            ),
             2,
         )
 
@@ -107,9 +132,7 @@ class WorkflowTests(unittest.TestCase):
         self.assertTrue(available["enough_stock"])
         self.assertEqual(available["shortage"], 0)
 
-        unknown = project.get_stock_inventory(
-            "2025-01-01", "Not a catalog item", 2
-        )
+        unknown = project.get_stock_inventory("2025-01-01", "Not a catalog item", 2)
         self.assertEqual(
             unknown,
             {"item_name": "Not a catalog item", "item_exists": False},
@@ -147,7 +170,12 @@ class WorkflowTests(unittest.TestCase):
         agent = project.OrchestrationAgent(Mock())
         self.assertEqual(
             set(agent.tools) - {"final_answer"},
-            {"process_request", "check_inventory", "get_pricing", "finalize_order", "reorder_stock"},
+            {
+                "process_request",
+                "check_inventory",
+                "get_pricing",
+                "finalize_order",
+            },
         )
 
     def test_orchestrator_tools_delegate_and_return_structured_responses(self):
@@ -155,52 +183,74 @@ class WorkflowTests(unittest.TestCase):
         request = {"item_name": "A4 paper", "quantity": 10}
         cases = [
             (
-                "process_request", "request_processor_agent",
+                "process_request",
+                "request_processor_agent",
                 {"request": "I need 10 A4 sheets"},
-                {"item_name": "A4 paper", "quantity": 10,
-                 "order_date": "2025-01-01", "job": "manager", "event": "meeting"},
+                {
+                    "item_name": "A4 paper",
+                    "quantity": 10,
+                    "order_date": "2025-01-01",
+                    "job": "manager",
+                    "event": "meeting",
+                },
                 ("I need 10 A4 sheets",),
             ),
             (
-                "check_inventory", "inventory_agent",
+                "check_inventory",
+                "inventory_agent",
                 {"request_information": request},
-                {"item_name": "A4 paper", "exists": True, "requested_quantity": 10,
-                 "current_stock": 3, "enough_stock": False, "shortage": 7,
-                 "delivery_date": "2025-01-01"},
+                {
+                    "item_name": "A4 paper",
+                    "exists": True,
+                    "requested_quantity": 10,
+                    "current_stock": 3,
+                    "enough_stock": False,
+                    "shortage": 7,
+                    "delivery_date": "2025-01-01",
+                },
                 ("A4 paper", "10"),
             ),
             (
-                "get_pricing", "quote_agent",
+                "get_pricing",
+                "quote_agent",
                 {"request_information": request},
-                {"item_name": "A4 paper", "requested_quantity": 10,
-                 "discount": 0.1, "total_price": 0.45},
+                {
+                    "item_name": "A4 paper",
+                    "requested_quantity": 10,
+                    "discount": 0.1,
+                    "total_price": 0.45,
+                },
                 ("A4 paper", "10"),
             ),
             (
-                "finalize_order", "order_agent",
+                "finalize_order",
+                "order_agent",
                 {"request_information": request},
-                {"item_name": "A4 paper", "requested_quantity": 10,
-                 "transaction_type": "sales", "status": "fulfilled"},
-                ("A4 paper", "10"),
-            ),
-            (
-                "reorder_stock", "order_agent",
-                {"item_name": "A4 paper", "quantity": 10},
-                {"item_name": "A4 paper", "requested_quantity": 10,
-                 "status": "reordered"},
+                {
+                    "item_name": "A4 paper",
+                    "requested_quantity": 10,
+                    "transaction_type": "sales",
+                    "status": "fulfilled",
+                },
                 ("A4 paper", "10"),
             ),
         ]
         for tool_name, agent_name, arguments, response, expected_input in cases:
-            with self.subTest(tool=tool_name):
-                specialist = getattr(agent, agent_name)
-                with patch.object(specialist, "run", return_value=json.dumps(response)) as run:
-                    result = agent.tools[tool_name](**arguments)
-                self.assertEqual(result, response)
-                run.assert_called_once()
-                prompt = run.call_args.args[0]
-                for value in expected_input:
-                    self.assertIn(value, prompt)
+            for return_format, agent_response in (
+                ("JSON string", json.dumps(response)),
+                ("dictionary", response),
+            ):
+                with self.subTest(tool=tool_name, return_format=return_format):
+                    specialist = getattr(agent, agent_name)
+                    with patch.object(
+                        specialist, "run", return_value=agent_response
+                    ) as run:
+                        result = agent.tools[tool_name](**arguments)
+                    self.assertEqual(result, response)
+                    run.assert_called_once()
+                    prompt = run.call_args.args[0]
+                    for value in expected_input:
+                        self.assertIn(value, prompt)
 
     def test_orchestrator_tools_reject_invalid_specialist_responses(self):
         agent = project.OrchestrationAgent(Mock())
@@ -210,12 +260,13 @@ class WorkflowTests(unittest.TestCase):
             ("check_inventory", "inventory_agent", {"request_information": request}),
             ("get_pricing", "quote_agent", {"request_information": request}),
             ("finalize_order", "order_agent", {"request_information": request}),
-            ("reorder_stock", "order_agent", {"item_name": "A4 paper", "quantity": 10}),
         ]
         invalid_responses = [
             ("not JSON", json.JSONDecodeError),
             ("[]", TypeError),
+            ([], TypeError),
             ("{}", ValueError),
+            ({}, ValueError),
         ]
         for tool_name, agent_name, arguments in cases:
             for response, error_type in invalid_responses:
@@ -310,19 +361,21 @@ class WorkflowTests(unittest.TestCase):
 
     def test_database_initialization_loads_quote_metadata(self):
         requests = pd.DataFrame([{"response": "A4 paper for an office"}])
-        quotes = pd.DataFrame([{
-            "total_amount": 10.0,
-            "quote_explanation": "A4 paper quote",
-            "request_metadata": (
-                "{'job_type': 'office manager', 'order_size': 'small', "
-                "'event_type': 'meeting'}"
-            ),
-        }])
+        quotes = pd.DataFrame(
+            [
+                {
+                    "total_amount": 10.0,
+                    "quote_explanation": "A4 paper quote",
+                    "request_metadata": (
+                        "{'job_type': 'office manager', 'order_size': 'small', "
+                        "'event_type': 'meeting'}"
+                    ),
+                }
+            ]
+        )
         engine = create_engine("sqlite:///:memory:")
         try:
-            with patch.object(
-                project.pd, "read_csv", side_effect=[requests, quotes]
-            ):
+            with patch.object(project.pd, "read_csv", side_effect=[requests, quotes]):
                 self.assertIs(project.init_database(engine, seed=7), engine)
 
             loaded_quote = pd.read_sql("SELECT * FROM quotes", engine).iloc[0]
@@ -341,6 +394,179 @@ class WorkflowTests(unittest.TestCase):
         finally:
             engine.dispose()
 
+
+@unittest.skipUnless(
+    os.getenv("RUN_LLM_INTEGRATION_TESTS") == "1",
+    "Set RUN_LLM_INTEGRATION_TESTS=1 to run tests against the real LLM",
+)
+@unittest.skipUnless(
+    os.getenv("UDACITY_OPENAI_API_KEY"),
+    "UDACITY_OPENAI_API_KEY is required for real-LLM integration tests",
+)
+class LLMIntegrationTests(unittest.TestCase):
+    def setUp(self):
+        self.original_engine = project.db_engine
+        self.engine = create_engine(
+            "sqlite:///:memory:",
+            connect_args={"check_same_thread": False},
+            poolclass=StaticPool,
+        )
+        project.db_engine = self.engine
+
+        with self.engine.begin() as conn:
+            conn.execute(
+                text("""
+                CREATE TABLE transactions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    item_name TEXT,
+                    transaction_type TEXT,
+                    units INTEGER,
+                    price REAL,
+                    transaction_date TEXT
+                )
+                """)
+            )
+            conn.execute(
+                text("""
+                CREATE TABLE inventory (
+                    item_name TEXT,
+                    category TEXT,
+                    unit_price REAL,
+                    current_stock INTEGER,
+                    min_stock_level INTEGER
+                )
+                """)
+            )
+            conn.execute(
+                text("""
+                CREATE TABLE quote_requests (
+                    id INTEGER,
+                    response TEXT
+                )
+                """)
+            )
+            conn.execute(
+                text("""
+                CREATE TABLE quotes (
+                    request_id INTEGER,
+                    total_amount REAL,
+                    quote_explanation TEXT,
+                    job_type TEXT,
+                    order_size TEXT,
+                    event_type TEXT,
+                    order_date TEXT
+                )
+                """)
+            )
+            conn.execute(
+                text("""
+                INSERT INTO inventory
+                    (item_name, category, unit_price, current_stock, min_stock_level)
+                VALUES ('A4 paper', 'paper', 0.05, 5, 2)
+                """)
+            )
+            conn.execute(
+                text("""
+                INSERT INTO transactions
+                    (item_name, transaction_type, units, price, transaction_date)
+                VALUES
+                    (NULL, 'sales', 1, 100.0, '2025-01-01'),
+                    ('A4 paper', 'stock_orders', 5, 0.25, '2025-01-01')
+                """)
+            )
+
+        self.agent = project.OrchestrationAgent(project.model)
+        self.request_information = {
+            "item_name": "A4 paper",
+            "quantity": 3,
+            "order_date": "2025-01-01",
+            "job": "office manager",
+            "event": "meeting",
+            "total_price": 0.15,
+        }
+
+    def tearDown(self):
+        project.db_engine = self.original_engine
+        self.engine.dispose()
+
+    def test_process_request_returns_requested_format(self):
+        response = self.agent.tools["process_request"](
+            request=(
+                "I need 10 A4 paper for a meeting. "
+                "The request date is 2025-01-01. I am an office manager."
+            )
+        )
+
+        self.assertIsInstance(response, dict)
+
+        expected_fields = {"item_name", "quantity", "order_date", "job", "event"}
+        self.assertEqual(set(response), expected_fields)
+
+        self.assertEqual(response["item_name"], "A4 paper")
+        self.assertEqual(response["quantity"], 10)
+        self.assertEqual(response["order_date"], "2025-01-01")
+        self.assertEqual(response["job"], "office manager")
+        self.assertEqual(response["event"], "meeting")
+
+    def test_check_inventory_returns_requested_format(self):
+        response = self.agent.tools["check_inventory"](
+            request_information=self.request_information
+        )
+
+        expected_fields = {
+            "item_name",
+            "exists",
+            "requested_quantity",
+            "current_stock",
+            "enough_stock",
+            "shortage",
+            "delivery_date",
+        }
+        self.assertIsInstance(response, dict)
+        self.assertEqual(set(response), expected_fields)
+        self.assertEqual(response["item_name"], "A4 paper")
+        self.assertEqual(response["requested_quantity"], 3)
+        self.assertEqual(response["current_stock"], 5)
+        self.assertTrue(response["exists"])
+        self.assertTrue(response["enough_stock"])
+        self.assertEqual(response["shortage"], 0)
+
+    def test_get_pricing_returns_requested_format(self):
+        response = self.agent.tools["get_pricing"](
+            request_information=self.request_information
+        )
+
+        expected_fields = {
+            "item_name",
+            "requested_quantity",
+            "discount",
+            "total_price",
+        }
+        self.assertIsInstance(response, dict)
+        self.assertEqual(set(response), expected_fields)
+        self.assertEqual(response["item_name"], "A4 paper")
+        self.assertEqual(response["requested_quantity"], 3)
+        self.assertGreaterEqual(response["discount"], 0)
+        self.assertLessEqual(response["discount"], 1)
+        self.assertGreater(response["total_price"], 0)
+
+    def test_finalize_order_returns_requested_format(self):
+        response = self.agent.tools["finalize_order"](
+            request_information=self.request_information
+        )
+
+        expected_fields = {
+            "item_name",
+            "requested_quantity",
+            "transaction_type",
+            "status",
+        }
+        self.assertIsInstance(response, dict)
+        self.assertEqual(set(response), expected_fields)
+        self.assertEqual(response["item_name"], "A4 paper")
+        self.assertEqual(response["requested_quantity"], 3)
+        self.assertEqual(response["transaction_type"], "sales")
+        self.assertTrue(response["status"])
 
 if __name__ == "__main__":
     unittest.main()
