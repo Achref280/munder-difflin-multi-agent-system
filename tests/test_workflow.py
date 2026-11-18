@@ -1,3 +1,4 @@
+import json
 import sys
 import unittest
 from datetime import datetime
@@ -148,6 +149,81 @@ class WorkflowTests(unittest.TestCase):
             set(agent.tools) - {"final_answer"},
             {"process_request", "check_inventory", "get_pricing", "finalize_order", "reorder_stock"},
         )
+
+    def test_orchestrator_tools_delegate_and_return_structured_responses(self):
+        agent = project.OrchestrationAgent(Mock())
+        request = {"item_name": "A4 paper", "quantity": 10}
+        cases = [
+            (
+                "process_request", "request_processor_agent",
+                {"request": "I need 10 A4 sheets"},
+                {"item_name": "A4 paper", "quantity": 10,
+                 "order_date": "2025-01-01", "job": "manager", "event": "meeting"},
+                ("I need 10 A4 sheets",),
+            ),
+            (
+                "check_inventory", "inventory_agent",
+                {"request_information": request},
+                {"item_name": "A4 paper", "exists": True, "requested_quantity": 10,
+                 "current_stock": 3, "enough_stock": False, "shortage": 7,
+                 "delivery_date": "2025-01-01"},
+                ("A4 paper", "10"),
+            ),
+            (
+                "get_pricing", "quote_agent",
+                {"request_information": request},
+                {"item_name": "A4 paper", "requested_quantity": 10,
+                 "discount": 0.1, "total_price": 0.45},
+                ("A4 paper", "10"),
+            ),
+            (
+                "finalize_order", "order_agent",
+                {"request_information": request},
+                {"item_name": "A4 paper", "requested_quantity": 10,
+                 "transaction_type": "sales", "status": "fulfilled"},
+                ("A4 paper", "10"),
+            ),
+            (
+                "reorder_stock", "order_agent",
+                {"item_name": "A4 paper", "quantity": 10},
+                {"item_name": "A4 paper", "requested_quantity": 10,
+                 "status": "reordered"},
+                ("A4 paper", "10"),
+            ),
+        ]
+        for tool_name, agent_name, arguments, response, expected_input in cases:
+            with self.subTest(tool=tool_name):
+                specialist = getattr(agent, agent_name)
+                with patch.object(specialist, "run", return_value=json.dumps(response)) as run:
+                    result = agent.tools[tool_name](**arguments)
+                self.assertEqual(result, response)
+                run.assert_called_once()
+                prompt = run.call_args.args[0]
+                for value in expected_input:
+                    self.assertIn(value, prompt)
+
+    def test_orchestrator_tools_reject_invalid_specialist_responses(self):
+        agent = project.OrchestrationAgent(Mock())
+        request = {"item_name": "A4 paper", "quantity": 10}
+        cases = [
+            ("process_request", "request_processor_agent", {"request": "10 A4 sheets"}),
+            ("check_inventory", "inventory_agent", {"request_information": request}),
+            ("get_pricing", "quote_agent", {"request_information": request}),
+            ("finalize_order", "order_agent", {"request_information": request}),
+            ("reorder_stock", "order_agent", {"item_name": "A4 paper", "quantity": 10}),
+        ]
+        invalid_responses = [
+            ("not JSON", json.JSONDecodeError),
+            ("[]", TypeError),
+            ("{}", ValueError),
+        ]
+        for tool_name, agent_name, arguments in cases:
+            for response, error_type in invalid_responses:
+                with self.subTest(tool=tool_name, response=response):
+                    specialist = getattr(agent, agent_name)
+                    with patch.object(specialist, "run", return_value=response):
+                        with self.assertRaises(error_type):
+                            agent.tools[tool_name](**arguments)
 
     def test_minimum_stock_lookup(self):
         self.assertEqual(project.get_min_stock_level("A4 paper"), 2)
