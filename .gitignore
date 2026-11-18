@@ -15,6 +15,8 @@ env/
 
 # Generated project output
 test_results.csv
-
+munder_difflin.db
+project_starter_AI.py
+flowchart_deterministic_AI.md
 # macOS
 .DS_Store

@@ -422,6 +422,7 @@ def get_all_inventory(as_of_date: str) -> dict[str, int]:
     # Convert the result into a dictionary {item_name: stock}
     return dict(zip(result["item_name"], result["stock"]))
 
+
 @tool
 def get_stock_level(item_name: str, as_of_date: str | datetime) -> pd.DataFrame:
     """
@@ -461,6 +462,8 @@ def get_stock_level(item_name: str, as_of_date: str | datetime) -> pd.DataFrame:
         db_engine,
         params={"item_name": item_name, "as_of_date": as_of_date},
     )
+
+
 @tool
 def get_min_stock_level(item_name: str) -> int:
     """
@@ -473,16 +476,17 @@ def get_min_stock_level(item_name: str) -> int:
         int: The minimum stock level for the item.
     """
     inventory_df = pd.read_sql(
-    "SELECT min_stock_level FROM inventory WHERE item_name = :item_name",
-    db_engine,
-    params={"item_name": item_name},
-)
+        "SELECT min_stock_level FROM inventory WHERE item_name = :item_name",
+        db_engine,
+        params={"item_name": item_name},
+    )
 
     if inventory_df.empty:
         raise ValueError(f"Item not found: {item_name}")
 
     min_stock = int(inventory_df["min_stock_level"].iloc[0])
     return min_stock
+
 
 @tool
 def get_supplier_delivery_date(input_date_str: str, quantity: int) -> str:
@@ -503,9 +507,9 @@ def get_supplier_delivery_date(input_date_str: str, quantity: int) -> str:
         str: Estimated delivery date in ISO format (YYYY-MM-DD).
     """
     # Debug log (comment out in production if needed)
-    print(
+    """print(
         f"FUNC (get_supplier_delivery_date): Calculating for qty {quantity} from date string '{input_date_str}'"
-    )
+    )"""
 
     # Attempt to parse the input date
     try:
@@ -737,20 +741,15 @@ model = OpenAIServerModel(
 
 # Tools for inventory agent
 def item_exists(item_name: str) -> bool:
-    """Check if an item exists in the inventory.
+    """Check if an item exists in the product catalog.
 
     Args:
         item_name (str): The name of the item to check.
 
     Returns:
-        bool: True if the item exists, False otherwise.
+        bool: True if the item is in the catalog, False otherwise.
     """
-    matches = pd.read_sql(
-        "SELECT 1 FROM inventory WHERE item_name = :item_name LIMIT 1",
-        db_engine,
-        params={"item_name": item_name},
-    )
-    return not matches.empty
+    return any(item["item_name"] == item_name for item in paper_supplies)
 
 
 @tool
@@ -771,17 +770,17 @@ def get_stock_inventory(
         raise ValueError("Quantity must be greater than zero.")
     if not item_exists(item_name):
         return {"item_name": item_name, "item_exists": False}
-    stock_df = get_stock_level(as_of_date, item_name)
+    stock_df = get_stock_level(item_name, as_of_date)
     current_stock = stock_df["current_stock"].iloc[0]
     shortage = max(0, quantity - current_stock)
 
     delivery_date = None
     if shortage > 0:
-        delivery_date = get_supplier_delivery_date(as_of_date, item_name)
+        delivery_date = get_supplier_delivery_date(as_of_date, shortage)
 
     return {
         "item_name": item_name,
-        "item_exists": True,
+        "exists": True,
         "requested_quantity": quantity,
         "current_stock": current_stock,
         "enough_stock": shortage == 0,
@@ -792,37 +791,36 @@ def get_stock_inventory(
 
 # Tools for quoting agent
 
+
 # Tools for ordering agent
 @tool
-def reorder_item(item_name: str, quantity: int) -> dict[str, Any]:
-    """Reorder an item from the supplier.
+def reorder_item(item_name: str, quantity: int, as_of_date: str) -> dict[str, Any]:
+    """Plan a supplier reorder after fulfilling the requested quantity.
 
     Args:
         item_name (str): The name of the item to reorder.
-        quantity (int): The quantity to reorder.
+        quantity (int): The customer quantity to fulfill.
+        as_of_date (str): The order date in YYYY-MM-DD format.
 
     Returns:
-        dict[str, Any]: A dictionary containing the item name, the reordered quantity, and the expected delivery date.
+        dict[str, Any]: Reorder quantity and estimated supplier delivery date.
     """
-    # get stock level before reordering
-    stock_df = get_stock_level(pd.Timestamp.now().strftime("%Y-%m-%d"), item_name)
-    current_stock = stock_df["current_stock"].iloc[0]
-    # get the minimal stock
-    min_stock = get_min_stock_level(pd.Timestamp.now().strftime("%Y-%m-%d"), item_name)
     if quantity <= 0:
         raise ValueError("Quantity must be greater than zero.")
-    if current_stock + quantity < min_stock:
-        delivery_date = get_supplier_delivery_date(pd.Timestamp.now().strftime("%Y-%m-%d"), item_name)
-        return {
-            "item_name": item_name,
-            "reordered_quantity": quantity,
-            "delivery_date": delivery_date,
-        }
+    stock = get_stock_inventory(as_of_date, item_name, quantity)
+    if not stock["exists"]:
+        raise ValueError(f"Unknown item: {item_name}")
+    reordered_quantity = max(0, stock["shortage"] + get_min_stock_level(item_name))
     return {
         "item_name": item_name,
-        "reordered_quantity": 0,
-        "delivery_date": None,
+        "reordered_quantity": reordered_quantity,
+        "delivery_date": (
+            get_supplier_delivery_date(as_of_date, reordered_quantity)
+            if reordered_quantity
+            else None
+        ),
     }
+
 
 # Set up your agents and create an orchestration agent that will manage them
 class RequestProcessorAgent(ToolCallingAgent):
@@ -892,7 +890,7 @@ class OrchestrationAgent(ToolCallingAgent):
         self.order_agent = OrderAgent(model)
 
         @tool
-        def process_request(self, request):
+        def process_request(request: str) -> dict[str, Any]:
             """Process customer order information to extract details.
 
             Args:
@@ -926,7 +924,7 @@ class OrchestrationAgent(ToolCallingAgent):
             return data
 
         @tool
-        def check_inventory(self, request_information):
+        def check_inventory(request_information: dict[str, Any]) -> dict[str, Any]:
             """Check the inventory for the requested items.
 
             Args:
@@ -957,9 +955,7 @@ class OrchestrationAgent(ToolCallingAgent):
             return data
 
         @tool
-        def get_pricing(
-            request_information
-        ):
+        def get_pricing(request_information: dict[str, Any]) -> dict[str, Any]:
             """Get the pricing for the requested items.
 
             Args:
@@ -987,9 +983,7 @@ class OrchestrationAgent(ToolCallingAgent):
             return data
 
         @tool
-        def finalize_order(
-            request_information
-        ):
+        def finalize_order(request_information: dict[str, Any]) -> dict[str, Any]:
             """Fulfill the order for the requested items.
 
             Args:
@@ -1022,10 +1016,7 @@ class OrchestrationAgent(ToolCallingAgent):
             return data
 
         @tool
-        def reorder_stock(
-            item_name,
-            quantity
-        ):
+        def reorder_stock(item_name: str, quantity: int) -> dict[str, Any]:
             """Reorder stock for the specified item.
 
             Args:
@@ -1056,11 +1047,18 @@ class OrchestrationAgent(ToolCallingAgent):
             return data
 
         super().__init__(
-            tools=[process_request, get_pricing, finalize_order],
+            tools=[
+                process_request,
+                check_inventory,
+                get_pricing,
+                finalize_order,
+                reorder_stock,
+            ],
             model=model,
             name="orchestration_agent",
             description="Agent responsible for orchestrating the interactions between other agents.",
         )
+
     def handle_request(self, request_with_date):
         return self.run(f"""
             The customer wants: "{request_with_date}"
@@ -1073,6 +1071,7 @@ class OrchestrationAgent(ToolCallingAgent):
             finalizing the order will involve confirming the transaction and updating the inventory accordingly.
             return a summary of all actions taken.
             """)
+
 
 # Run your test scenarios by writing them here. Make sure to keep track of them.
 
@@ -1105,6 +1104,7 @@ def run_test_scenarios():
     ############
     ############
     ############
+    orchestration_agent = OrchestrationAgent(model)
 
     results = []
     for idx, row in quote_requests_sample.iterrows():
@@ -1127,7 +1127,7 @@ def run_test_scenarios():
         ############
         ############
 
-         response = self.handle_request(request_with_date)
+        response = orchestration_agent.handle_request(request_with_date)
 
         # Update state
         report = generate_financial_report(request_date)
