@@ -178,9 +178,37 @@ class WorkflowTests(unittest.TestCase):
             },
         )
 
+    def test_handle_request_stops_before_fulfillment_when_stock_is_short(self):
+        agent = project.OrchestrationAgent(Mock())
+        with patch.object(
+            agent, "run", return_value={"status": "awaiting_acceptance"}
+        ) as run:
+            result = agent.handle_request("I need 10 A4 paper")
+
+        self.assertEqual(result, {"status": "awaiting_acceptance"})
+        run.assert_called_once()
+        prompt = run.call_args.args[0]
+        self.assertIn("If enough_stock is false", prompt)
+        self.assertIn("do NOT call finalize_order", prompt)
+        self.assertIn("awaiting_acceptance", prompt)
+        self.assertIn("before the supplier reorder", prompt)
+
     def test_orchestrator_tools_delegate_and_return_structured_responses(self):
         agent = project.OrchestrationAgent(Mock())
-        request = {"item_name": "A4 paper", "quantity": 10}
+        inventory_arguments = {
+            "item_name": "A4 paper",
+            "quantity": 10,
+            "order_date": "2025-01-01",
+        }
+        pricing_arguments = {
+            **inventory_arguments,
+            "job": "manager",
+            "event": "meeting",
+        }
+        order_arguments = {
+            **inventory_arguments,
+            "total_price": 0.45,
+        }
         cases = [
             (
                 "process_request",
@@ -198,7 +226,7 @@ class WorkflowTests(unittest.TestCase):
             (
                 "check_inventory",
                 "inventory_agent",
-                {"request_information": request},
+                inventory_arguments,
                 {
                     "item_name": "A4 paper",
                     "exists": True,
@@ -213,7 +241,7 @@ class WorkflowTests(unittest.TestCase):
             (
                 "get_pricing",
                 "quote_agent",
-                {"request_information": request},
+                pricing_arguments,
                 {
                     "item_name": "A4 paper",
                     "requested_quantity": 10,
@@ -225,7 +253,7 @@ class WorkflowTests(unittest.TestCase):
             (
                 "finalize_order",
                 "order_agent",
-                {"request_information": request},
+                order_arguments,
                 {
                     "item_name": "A4 paper",
                     "requested_quantity": 10,
@@ -254,12 +282,38 @@ class WorkflowTests(unittest.TestCase):
 
     def test_orchestrator_tools_reject_invalid_specialist_responses(self):
         agent = project.OrchestrationAgent(Mock())
-        request = {"item_name": "A4 paper", "quantity": 10}
         cases = [
             ("process_request", "request_processor_agent", {"request": "10 A4 sheets"}),
-            ("check_inventory", "inventory_agent", {"request_information": request}),
-            ("get_pricing", "quote_agent", {"request_information": request}),
-            ("finalize_order", "order_agent", {"request_information": request}),
+            (
+                "check_inventory",
+                "inventory_agent",
+                {
+                    "item_name": "A4 paper",
+                    "quantity": 10,
+                    "order_date": "2025-01-01",
+                },
+            ),
+            (
+                "get_pricing",
+                "quote_agent",
+                {
+                    "item_name": "A4 paper",
+                    "quantity": 10,
+                    "order_date": "2025-01-01",
+                    "job": "manager",
+                    "event": "meeting",
+                },
+            ),
+            (
+                "finalize_order",
+                "order_agent",
+                {
+                    "item_name": "A4 paper",
+                    "quantity": 10,
+                    "order_date": "2025-01-01",
+                    "total_price": 0.45,
+                },
+            ),
         ]
         invalid_responses = [
             ("not JSON", json.JSONDecodeError),
@@ -510,7 +564,9 @@ class LLMIntegrationTests(unittest.TestCase):
 
     def test_check_inventory_returns_requested_format(self):
         response = self.agent.tools["check_inventory"](
-            request_information=self.request_information
+            item_name="A4 paper",
+            quantity=3,
+            order_date="2025-01-01",
         )
 
         expected_fields = {
@@ -533,7 +589,11 @@ class LLMIntegrationTests(unittest.TestCase):
 
     def test_get_pricing_returns_requested_format(self):
         response = self.agent.tools["get_pricing"](
-            request_information=self.request_information
+            item_name="A4 paper",
+            quantity=3,
+            order_date="2025-01-01",
+            job="office manager",
+            event="meeting",
         )
 
         expected_fields = {
@@ -552,7 +612,10 @@ class LLMIntegrationTests(unittest.TestCase):
 
     def test_finalize_order_returns_requested_format(self):
         response = self.agent.tools["finalize_order"](
-            request_information=self.request_information
+            item_name="A4 paper",
+            quantity=3,
+            order_date="2025-01-01",
+            total_price=0.15,
         )
 
         expected_fields = {

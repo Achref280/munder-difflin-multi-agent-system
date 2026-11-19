@@ -754,7 +754,7 @@ def item_exists(item_name: str) -> bool:
 
 @tool
 def get_stock_inventory(
-    as_of_date: str, item_name: str, quantity: int
+    as_of_date: str, item_name: str, quantity: int, order_date: str
 ) -> dict[str, Any]:
     """Check if the specified quantity of an item is available in inventory.
 
@@ -762,6 +762,7 @@ def get_stock_inventory(
         as_of_date (str): The date to check inventory for, in YYYY-MM-DD format.
         item_name (str): The name of the item to check.
         quantity (int): The quantity to check for.
+        order_date (str): The order date in YYYY-MM-DD format.
 
     Returns:
         dict[str, Any]: A dictionary containing the item name, whether it exists, the requested quantity, the current stock level, whether there is enough stock, the shortage, and the delivery date.
@@ -774,7 +775,7 @@ def get_stock_inventory(
     current_stock = stock_df["current_stock"].iloc[0]
     shortage = max(0, quantity - current_stock)
 
-    delivery_date = None
+    delivery_date = order_date
     if shortage > 0:
         delivery_date = get_supplier_delivery_date(as_of_date, shortage)
 
@@ -794,20 +795,23 @@ def get_stock_inventory(
 
 # Tools for ordering agent
 @tool
-def reorder_item(item_name: str, quantity: int, as_of_date: str) -> dict[str, Any]:
+def reorder_item(
+    item_name: str, quantity: int, as_of_date: str, order_date: str
+) -> dict[str, Any]:
     """Plan a supplier reorder after fulfilling the requested quantity.
 
     Args:
         item_name (str): The name of the item to reorder.
         quantity (int): The customer quantity to fulfill.
         as_of_date (str): The order date in YYYY-MM-DD format.
+        order_date (str): The order date in YYYY-MM-DD format.
 
     Returns:
         dict[str, Any]: Reorder quantity and estimated supplier delivery date.
     """
     if quantity <= 0:
         raise ValueError("Quantity must be greater than zero.")
-    stock = get_stock_inventory(as_of_date, item_name, quantity)
+    stock = get_stock_inventory(as_of_date, item_name, quantity, order_date=order_date)
     if not stock["exists"]:
         raise ValueError(f"Unknown item: {item_name}")
     reordered_quantity = max(0, stock["shortage"] + get_min_stock_level(item_name))
@@ -862,7 +866,7 @@ class InventoryAgent(ToolCallingAgent):
 
     def __init__(self, model):
         super().__init__(
-            tools=[get_stock_inventory, get_min_stock_level, create_transaction],
+            tools=[get_stock_inventory],
             model=model,
             name="inventory_agent",
             description="Agent responsible for managing inventory. Checks stock levels and reorders items when necessary.",
@@ -894,6 +898,7 @@ class OrderAgent(ToolCallingAgent):
             tools=[
                 reorder_item,
                 create_transaction,
+                get_min_stock_level,
             ],
             model=model,
             name="order_agent",
@@ -944,20 +949,36 @@ class OrchestrationAgent(ToolCallingAgent):
             return data
 
         @tool
-        def check_inventory(request_information: dict[str, Any]) -> dict[str, Any]:
+        def check_inventory(
+            item_name: str,
+            quantity: int,
+            order_date: str,
+        ) -> dict[str, Any]:
             """Check the inventory for the requested items.
 
             Args:
-                request_information: Processed request information containing item_name and quantity.
+                item_name: Exact catalog item name.
+                quantity: Number of units requested.
+                order_date: Request date in YYYY-MM-DD format.
 
             Returns:
                 Inventory status for the requested items.
             """
+            request_information = {
+                "item_name": item_name,
+                "quantity": quantity,
+                "order_date": order_date,
+            }
             response = self.inventory_agent.run(f"""
                 The customer wants: "{request_information}"
+                Use the tool get_stock_inventory and get the following information:
+                    Check if the requested items are available in the inventory.
+                    if it is available check the if the current stock is enough to fulfill the requested quantity.
+                    if the current stock is not enough to fulfill the requested quantity, calculate the shortage then determine the estimated delivery date for the shortage.
+                    Compare the delivery date with the order date to determine if the shortage can be fulfilled on time.
+                    if there is no shortage, the delivery date is the same as the order date.
 
-                Check if the requested items are available in the inventory.
-                Return only valid JSON with item_name, exists, requested_quantity, current_stock, enough_stock, shortage, and delivery_date.
+                Return only valid JSON with item_name, exists, requested_quantity, current_stock, enough_stock, shortage, and delivery_date, order_will_be_fulfilled_on_time
                 Use double quotes, JSON booleans, and null where appropriate.
                 """)
             data = parse_agent_response(response)
@@ -969,20 +990,45 @@ class OrchestrationAgent(ToolCallingAgent):
                 or "enough_stock" not in data
                 or "shortage" not in data
                 or "delivery_date" not in data
+                or "order_will_be_fulfilled_on_time" not in data
             ):
                 raise ValueError("Missing required fields in response")
             return data
 
         @tool
-        def get_pricing(request_information: dict[str, Any]) -> dict[str, Any]:
+        def get_pricing(
+            item_name: str,
+            quantity: int,
+            order_date: str,
+            job: str,
+            event: str,
+        ) -> dict[str, Any]:
             """Get the pricing for the requested items.
 
             Args:
-                request_information: Processed request information containing item_name and quantity.
+                item_name: Exact catalog item name.
+                quantity: Number of units requested.
+                order_date: Request date in YYYY-MM-DD format.
+                job: Customer's job or role.
+                event: Customer event or occasion.
 
             Returns:
                 Pricing information for the requested items.
             """
+            catalog_item = next(
+                (item for item in paper_supplies if item["item_name"] == item_name),
+                None,
+            )
+            if catalog_item is None:
+                raise ValueError(f"Unknown item: {item_name}")
+            request_information = {
+                "item_name": item_name,
+                "quantity": quantity,
+                "order_date": order_date,
+                "job": job,
+                "event": event,
+                "unit_price": catalog_item["unit_price"],
+            }
             response = self.quote_agent.run(f"""
                 The customer wants: "{request_information}"
 
@@ -1001,25 +1047,41 @@ class OrchestrationAgent(ToolCallingAgent):
             return data
 
         @tool
-        def finalize_order(request_information: dict[str, Any]) -> dict[str, Any]:
+        def finalize_order(
+            item_name: str,
+            quantity: int,
+            order_date: str,
+            total_price: float,
+        ) -> dict[str, Any]:
             """Fulfill the order for the requested items.
 
             Args:
-                request_information: Processed request information containing item_name and quantity.
+                item_name: Exact catalog item name.
+                quantity: Number of units to fulfill.
+                order_date: Order date in YYYY-MM-DD format.
+                total_price: Quoted total price for the order.
 
             Returns:
                 Confirmation of the order fulfillment.
             """
+            request_information = {
+                "item_name": item_name,
+                "quantity": quantity,
+                "order_date": order_date,
+                "total_price": total_price,
+            }
             response = self.order_agent.run(f"""
                 The customer wants: "{request_information}"
-
-                Fulfill the order for the requested items.
-                using the create_transaction for recording the order transaction.
-                then check if the stock needs to be reordered using the reorder_item tool.
-                if it needs to be reordered, use the create_transaction tool to record the reorder transaction.
-                When reordering the stock use the appropriate 'stock_orders' transaction_type.
+                First check the current stock level using the get_stock_inventory tool.
+                then check if the current stock is sufficient to fulfill the order.
+                if it is sufficient, proceed to fulfill the order using the create_transaction for recording the order transaction.
+                if it is not sufficient get the delivery details from get_stock_inventory and use create_transaction to buy the shortfall quantity.
+                after buying the shortfall quantity proceed to fulfill the order using the create_transaction for recording the order transaction.
+                After fulfilling the order, check if reordering is needed and determine the safety stock requirement using the reorder_item tool.
+                if reordering is needed, use the create_transaction tool buy the required safety stock.
+                When reordering or buying the stock use the appropriate 'stock_orders' transaction_type.
                 when recording the sell order transaction use the appropriate 'sales' transaction_type.
-                Return only valid JSON with item_name, requested_quantity, transaction_type, and status.
+                Return only valid JSON with item_name, requested_quantity, transaction_type, and status per transaction made, so that the response captures all actions taken.
                 Use double quotes around all keys and string values.
                 """)
             data = parse_agent_response(response)
@@ -1048,13 +1110,22 @@ class OrchestrationAgent(ToolCallingAgent):
         return self.run(f"""
             The customer wants: "{request_with_date}"
 
-            Process the request and provide the necessary actions.
-            first use the process_request tool to handle the request.
-            then use check_inventory tool to verify item availability.
-            after that call the get_pricing tool to obtain pricing information.
-            finally use the finalize_order tool to complete the order.
-            finalizing the order will involve confirming the transaction and updating the inventory accordingly.
-            return a summary of all actions taken.
+            Follow this workflow:
+            1. Use process_request to extract the order fields.
+            2. Pass its item name, quantity, and order date to check_inventory.
+            3. If the item does not exist, stop and ask for a valid catalog item.
+            4. Use get_pricing with the item name, quantity, order date, job, and event.
+            5. If enough_stock is true, call finalize_order with the item name,
+               quantity, order date, and quoted total_price.
+            6. If enough_stock is false, do NOT call finalize_order and do NOT
+               create sales or supplier transactions. Return a quote marked
+               awaiting_acceptance that explains the available quantity, shortage,
+               requested quantity, estimated delivery date, discount, and total price.
+            7. In the shortage case, clearly state that the customer must accept
+               the quote before the supplier reorder and fulfillment can be executed.
+
+            Return a concise JSON summary of the inventory, quote, fulfillment status,
+            and any required next action.
             """)
 
 
