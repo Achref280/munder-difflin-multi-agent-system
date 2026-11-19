@@ -10,6 +10,7 @@ import numpy as np
 import pandas as pd
 from smolagents import (
     OpenAIServerModel,
+    Tool,
     ToolCallingAgent,
     tool,
 )
@@ -128,6 +129,8 @@ paper_supplies = [
     {"item_name": "250 gsm cardstock", "category": "specialty", "unit_price": 0.30},
     {"item_name": "220 gsm poster paper", "category": "specialty", "unit_price": 0.35},
 ]
+
+DEFAULT_MIN_STOCK_LEVEL = 50
 
 # Given below are some utility functions you can use to implement your multi-agent system
 
@@ -482,6 +485,8 @@ def get_min_stock_level(item_name: str) -> int:
     )
 
     if inventory_df.empty:
+        if item_exists(item_name):
+            return DEFAULT_MIN_STOCK_LEVEL
         raise ValueError(f"Item not found: {item_name}")
 
     min_stock = int(inventory_df["min_stock_level"].iloc[0])
@@ -876,6 +881,24 @@ def execute_order(
     plan = reorder_item(item_name, quantity, order_date, order_date)
     transactions = []
     with db_engine.begin() as conn:
+        conn.execute(
+            text("""
+                INSERT INTO inventory (
+                    item_name, category, unit_price, current_stock, min_stock_level
+                )
+                SELECT
+                    :item_name, :category, :unit_price, 0, :min_stock_level
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM inventory WHERE item_name = :item_name
+                )
+            """),
+            {
+                "item_name": item_name,
+                "category": catalog_item["category"],
+                "unit_price": catalog_item["unit_price"],
+                "min_stock_level": DEFAULT_MIN_STOCK_LEVEL,
+            },
+        )
         for transaction_type, units, date in (
             (
                 "stock_orders",
@@ -1123,12 +1146,86 @@ def can_fulfill_by_request_date(
         raise ValueError("Delivery and request dates must use ISO format") from exc
 
 
+class RequestResultTool(Tool):
+    """Return a schema-constrained extracted request from the processor."""
+
+    name = "final_answer"
+    description = "Return the extracted customer request."
+    output_type = "object"
+    inputs = {
+        "answer": {
+            "type": "object",
+            "description": "The complete extracted request.",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "original_name": {"type": "string"},
+                            "item_name": {
+                                "type": "string",
+                                "description": (
+                                    "Exact catalog name, or an empty string "
+                                    "when clarification is required."
+                                ),
+                            },
+                            "quantity": {
+                                "type": "integer",
+                                "description": (
+                                    "Quantity in catalog units, or zero when "
+                                    "the quantity cannot be determined."
+                                ),
+                            },
+                            "requested_attributes": {
+                                "type": "array",
+                                "items": {"type": "string"},
+                            },
+                            "candidates": {
+                                "type": "array",
+                                "items": {"type": "string"},
+                            },
+                            "clarification_required": {"type": "boolean"},
+                            "clarification_message": {"type": "string"},
+                        },
+                        "required": [
+                            "original_name",
+                            "item_name",
+                            "quantity",
+                            "requested_attributes",
+                            "candidates",
+                            "clarification_required",
+                            "clarification_message",
+                        ],
+                        "additionalProperties": False,
+                    },
+                },
+                "order_date": {"type": "string"},
+                "job": {"type": "string"},
+                "event": {"type": "string"},
+                "needs_clarification": {"type": "boolean"},
+            },
+            "required": [
+                "items",
+                "order_date",
+                "job",
+                "event",
+                "needs_clarification",
+            ],
+            "additionalProperties": False,
+        }
+    }
+
+    def forward(self, answer: dict[str, Any]) -> dict[str, Any]:
+        return answer
+
+
 class RequestProcessorAgent(ToolCallingAgent):
     """Agent responsible for processing requests."""
 
     def __init__(self, model):
         super().__init__(
-            tools=[],
+            tools=[RequestResultTool()],
             model=model,
             name="request_processor_agent",
             description="Agent responsible for processing requests and delegating them to the appropriate agents.",
@@ -1217,7 +1314,9 @@ class OrchestrationAgent(ToolCallingAgent):
                   stated, such as 10 reams with 500 sheets per ream = 5,000 sheets.
                 - Never guess a package conversion.
                 - If no single catalog item can be selected confidently, set item_name
-                  to null and clarification_required to true. Candidate values must
+                  to "" and quantity to 0 or the explicitly stated quantity when
+                  only the catalog mapping is unclear. Set clarification_required
+                  to true. Candidate values must
                   be exact names from the supplied catalog. Explain what clarification
                   is needed.
                 - A problematic item must not block valid items in the same request.
@@ -1231,8 +1330,8 @@ class OrchestrationAgent(ToolCallingAgent):
                   "items": [
                     {{
                       "original_name": "customer's product wording",
-                      "item_name": "exact catalog name or null",
-                      "quantity": positive_integer_in_catalog_units_or_null,
+                      "item_name": "exact catalog name or empty string",
+                      "quantity": positive_integer_in_catalog_units_or_0,
                       "requested_attributes": ["A4", "white"],
                       "candidates": ["possible exact catalog names"],
                       "clarification_required": false,

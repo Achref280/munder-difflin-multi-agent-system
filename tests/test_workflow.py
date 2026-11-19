@@ -170,6 +170,21 @@ class WorkflowTests(unittest.TestCase):
                 agent = agent_type(Mock())
                 self.assertEqual(set(agent.tools) - {"final_answer"}, expected)
 
+    def test_request_processor_uses_structured_final_answer_schema(self):
+        agent = project.RequestProcessorAgent(Mock())
+        final_answer = agent.tools["final_answer"]
+
+        self.assertIsInstance(final_answer, project.RequestResultTool)
+        answer_schema = final_answer.inputs["answer"]
+        self.assertEqual(answer_schema["type"], "object")
+        self.assertIn("items", answer_schema["properties"])
+        self.assertFalse(answer_schema["additionalProperties"])
+        item_schema = answer_schema["properties"]["items"]["items"]
+        self.assertIn("clarification_required", item_schema["required"])
+        self.assertEqual(
+            item_schema["properties"]["item_name"]["type"], "string"
+        )
+
     def test_orchestrator_registers_its_workflow_tools(self):
         agent = project.OrchestrationAgent(Mock())
         self.assertEqual(
@@ -616,8 +631,12 @@ class WorkflowTests(unittest.TestCase):
 
     def test_minimum_stock_lookup(self):
         self.assertEqual(project.get_min_stock_level("A4 paper"), 2)
+        self.assertEqual(
+            project.get_min_stock_level("Paper cups"),
+            project.DEFAULT_MIN_STOCK_LEVEL,
+        )
         with self.assertRaisesRegex(ValueError, "Item not found"):
-            project.get_min_stock_level("Paper cups")
+            project.get_min_stock_level("Not a catalog item")
 
     def test_reorder_rejects_nonpositive_quantity(self):
         with self.assertRaisesRegex(ValueError, "Quantity must be greater than zero"):
@@ -663,6 +682,31 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(
             [transaction["transaction_date"] for transaction in transactions],
             ["2025-01-02", "2025-01-01", "2025-01-02"],
+        )
+
+    def test_execute_order_supports_catalog_item_without_inventory_record(self):
+        transactions = project.execute_order(
+            "Paper cups", 10, "2025-01-01", 0.8
+        )
+
+        self.assertEqual(
+            [transaction["transaction_type"] for transaction in transactions],
+            ["stock_orders", "stock_orders", "sales"],
+        )
+        self.assertEqual(
+            [transaction["requested_quantity"] for transaction in transactions],
+            [10, project.DEFAULT_MIN_STOCK_LEVEL, 10],
+        )
+        with self.engine.connect() as conn:
+            inventory = conn.execute(
+                text(
+                    "SELECT unit_price, min_stock_level "
+                    "FROM inventory WHERE item_name = 'Paper cups'"
+                )
+            ).one()
+        self.assertAlmostEqual(inventory.unit_price, 0.08)
+        self.assertEqual(
+            inventory.min_stock_level, project.DEFAULT_MIN_STOCK_LEVEL
         )
 
     def test_supplier_delivery_lead_time_boundaries(self):
