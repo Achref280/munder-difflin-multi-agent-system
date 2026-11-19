@@ -1,7 +1,6 @@
 ```mermaid
 %%{init: {'theme': 'dark', 'themeVariables': { 'lineColor': '#38bdf8', 'primaryTextColor': '#f8fafc', 'edgeLabelBackground': '#1e293b'}}}%%
 flowchart TD
-    %% Styling Definitions
     classDef startend fill:#1e293b,stroke:#38bdf8,stroke-width:2px,color:#fff
     classDef agent fill:#0f172a,stroke:#818cf8,stroke-width:2px,color:#e0e7ff
     classDef decision fill:#312e81,stroke:#a78bfa,stroke-width:2px,color:#fff
@@ -9,59 +8,64 @@ flowchart TD
     classDef human fill:#78350f,stroke:#fbbf24,stroke-width:2px,color:#fef3c7
     classDef memory fill:#334155,stroke:#94a3b8,stroke-width:2px,stroke-dasharray: 5 5,color:#f8fafc
 
-    %% Force High-Visibility Arrows
     linkStyle default stroke:#94a3b8,stroke-width:2px
 
-    %% Main Workflow Nodes
-    Start([User Prompt]):::startend
-    DB[(Inventory, Quote requests, quotes, transactions)]:::memory
+    Request([Customer request and request date]):::startend
+    Result([Per-item result and final summary]):::startend
+    Clarification([Return only the problematic item<br/>for clarification]):::human
+    Late([Return cannot_deliver_on_time<br/>for this item]):::human
+    DB[(Inventory, historical requests,<br/>quotes, and transactions)]:::memory
 
-    %% Agent
-    Orchestrator[Orchestrator]:::agent
-    Inventory_Agent[Inventory Agent]:::agent
-    Quote_Agent[Quote Agent]:::agent
-    Finalizing_Transaction_Agent[Finalizing Transaction Agent]:::agent
-    %% Decision
-    Enough_Stock{Enough stock?}:::decision
-    Quote_Accepted{Quote accepted?}:::decision
-    %% Tools
-    get_inventory_report[check inventory tool]:::tool
-    get_quote_history[get_quote history tool]:::tool
-    get_cash_balance[get cash balance tool]:::tool
-    get_financial_report[get financial report tool]:::tool
-    update_inventory[update inventory tool]:::tool
-    get_orderId[get order Id]:::tool
-    reorder_inventory[reorder inventory]:::tool
+    Processor[Request Processor Agent]:::agent
+    StructuredFinal[Structured final_answer schema]:::tool
+    Validate[Validate exact catalog item,<br/>quantity, date, and candidates]:::tool
+    ClarificationGate{Item needs clarification?}:::decision
 
-    %% Flow Connections
-    Start --> Orchestrator
+    InventoryAgent[Inventory Agent]:::agent
+    StockTool[get_stock_inventory]:::tool
+    OnTimeGate{Can shortage arrive<br/>by request date?}:::decision
 
-    Orchestrator --> |checks Inventor| Inventory_Agent
-    Inventory_Agent -->|Need Knowledge| get_inventory_report
-    get_inventory_report -->|read| DB
-    get_inventory_report -->|returns stock status| Inventory_Agent
-    Inventory_Agent -->|Observations| Orchestrator
-    Inventory_Agent -->|Stock result and ETA| Enough_Stock
-    Orchestrator --> |get pricing| Quote_Agent
-    Quote_Agent <--> |get pricing history| get_quote_history
-    get_quote_history -->|read| DB
+    QuoteAgent[Quote Agent]:::agent
+    HistoryTool[search_quote_history<br/>as of request date]:::tool
+    FinanceTools[get_cash_balance and<br/>financial report]:::tool
+    Pricing[Quote with discount,<br/>total, and explanation]:::tool
 
-    Quote_Agent <--> |get cash balance| get_cash_balance
-    get_cash_balance -->|read| DB
+    OrderAgent[Order Agent]:::agent
+    ExecuteOrder[execute_order]:::tool
+    ShortageOrder[Separate shortage<br/>stock_orders]:::tool
+    SafetyOrder[Separate safety-stock<br/>stock_orders]:::tool
+    Sale[Sales transaction]:::tool
 
-    Quote_Agent <--> |get inventory status| get_inventory_report
-    get_inventory_report -->|read| DB
+    Request --> Processor
+    Processor --> StructuredFinal
+    StructuredFinal --> Validate
+    Validate --> ClarificationGate
 
-    Quote_Agent <--> |get financial report| get_financial_report
-    Quote_Agent --> |returns quote| Orchestrator
-    Enough_Stock -->|Yes| Orchestrator
-    Enough_Stock -->|No| Quote_Agent
-    Orchestrator --> Quote_Accepted
-    Quote_Accepted -->|Not accepted| EndShortage([Await customer decision]):::human
-    Quote_Accepted -->|Accepted| Finalizing_Transaction_Agent
-    Orchestrator --> |fulfill and reorder if required| Finalizing_Transaction_Agent
-    Finalizing_Transaction_Agent <--> |create order Id| get_orderId
-    Finalizing_Transaction_Agent <--> |update inventory| update_inventory
-    update_inventory -->|write| DB
-    Finalizing_Transaction_Agent --> |finalizes transaction| Orchestrator
+    ClarificationGate -->|No, valid item| InventoryAgent
+    ClarificationGate -->|Yes, block only this item| Clarification
+
+    InventoryAgent --> StockTool
+    StockTool <--> DB
+    StockTool --> OnTimeGate
+
+    OnTimeGate -->|No, block only this item| Late
+    OnTimeGate -->|Yes| QuoteAgent
+
+    QuoteAgent --> HistoryTool
+    HistoryTool -->|read historical quotes| DB
+    QuoteAgent --> FinanceTools
+    FinanceTools -->|read date-based finances| DB
+    QuoteAgent --> Pricing
+    Pricing --> OrderAgent
+
+    OrderAgent --> ExecuteOrder
+    ExecuteOrder --> ShortageOrder
+    ExecuteOrder --> SafetyOrder
+    ExecuteOrder --> Sale
+    ShortageOrder -->|write if quantity > 0| DB
+    SafetyOrder -->|write if quantity > 0| DB
+    Sale -->|write once| DB
+    ExecuteOrder --> Result
+    Clarification --> Result
+    Late --> Result
 ```
