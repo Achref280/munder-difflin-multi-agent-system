@@ -154,6 +154,41 @@ evaluation metrics.
    generated automatically, but final purchase and sale transactions should be
    tied to explicit quote acceptance.
 
+5. **Add a customer simulator.** Use the role, event, mood, request, and
+   delivery deadline from the scenario CSV to simulate multi-turn interaction.
+   The simulated customer could answer clarification questions, request a
+   revised quote, and accept or reject an offer. A future version can use a
+   dedicated Customer Agent, or keep this component deterministic.
+
+6. **Add a terminal progress visualization.** Emit structured workflow events
+   from request extraction, inventory, pricing, and fulfillment, then render
+   them with a library such as Rich. The animation should be presentation-only;
+   agents must continue producing structured results independently of terminal
+   output.
+
+7. **Add or integrate business-advisor capabilities.** A read-only advisor
+   could analyze completed transactions to recommend inventory, supplier,
+   discount, and catalog improvements. A future version can introduce a
+   dedicated Business Advisor Agent without the current five-agent project
+   constraint. Python should calculate the metrics and the agent should explain
+   them and recommend actions.
+
+### Suggested enhanced workflow
+
+```text
+Customer simulator
+  -> submits and negotiates a request
+  -> five-agent operations workflow
+  -> structured progress events
+  -> terminal visualization
+  -> completed transactions
+  -> business-advisor analysis
+  -> operational recommendations
+```
+
+This extension would improve evaluation quality without allowing advisory or
+visualization logic to mutate financial records directly.
+
 ## Conclusion
 
 The system successfully demonstrates agent specialization, structured

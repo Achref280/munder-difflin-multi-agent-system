@@ -1,94 +1,240 @@
-# Munder Difflin Multi-Agent System Project
+# Munder Difflin Multi-Agent Paper Company
 
-Welcome to the starter code repository for the **Munder Difflin Paper Company Multi-Agent System Project**! This repository contains the starter code and tools you will need to design, build, and test a multi-agent system that supports core business operations at a fictional paper manufacturing company.
+A multi-agent workflow that processes paper-supply requests, checks dated
+inventory, generates explainable quotes, and records fulfillment transactions.
 
-## Project Context
+## Overview
 
-You’ve been hired as an AI consultant by Munder Difflin Paper Company, a fictional enterprise looking to modernize their workflows. They need a smart, modular **multi-agent system** to automate:
+The project uses five `smolagents` agents:
 
-- **Inventory checks** and restocking decisions
-- **Quote generation** for incoming sales inquiries
-- **Order fulfillment** including supplier logistics and transactions
+1. **Orchestration Agent** coordinates each request line item.
+2. **Request Processor Agent** maps natural-language products to exact
+   catalog items and extracts the requested delivery deadline.
+3. **Inventory Agent** checks stock, shortages, and supplier delivery dates.
+4. **Quote Agent** recommends a numeric bulk discount and explains its
+   decision.
+5. **Order Agent** calls one atomic fulfillment tool.
 
-Your solution must use a maximum of **5 agents** and process inputs and outputs entirely via **text-based communication**.
+Python validates the LLM results and performs business-critical calculations.
+An unsupported item blocks only that item; valid items in the same request can
+continue through the workflow.
 
-This project challenges your ability to orchestrate agents using modern Python frameworks like `smolagents`, `pydantic-ai`, or `npcsh`, and combine that with real data tools like `sqlite3`, `pandas`, and LLM prompt engineering.
+See the [workflow diagram](flowchart.md) and [evaluation report](EVALUATION_REPORT.md).
 
----
+## Features
 
-## What’s Included
+- Multi-item natural-language request processing
+- Exact catalog validation with per-item clarification
+- Trusted request date, customer job, and event metadata from scenario CSV data
+- Separate request date, requested delivery date, and supplier delivery date
+- Date-based inventory, cash, and historical quote lookups
+- Structured `final_answer` schemas for request, quote, and order agents
+- Deterministic price arithmetic:
 
-From the `project.zip` starter archive, you will find:
+  ```text
+  subtotal = unit_price × quantity
+  total = subtotal × (1 - discount_rate)
+  ```
 
-- `project_starter.py`: The main Python script you will modify to implement your agent system
-- `quotes.csv`: Historical quote data used for reference by quoting agents
-- `quote_requests.csv`: Incoming customer requests used to build quoting logic
-- `quote_requests_sample.csv`: A set of simulated test cases to evaluate your system
+- Separate shortage and safety-stock supplier purchases
+- Atomic shortage, safety-stock, and sale transaction execution
+- Automatic inventory initialization for valid catalog items not included in
+  the sampled inventory
+- JSON response serialization and embedded evaluation assertions
+- Unit tests plus opt-in real-LLM integration tests
 
----
+## Project Structure
 
-## Workspace Instructions
+```text
+.
+├── project_starter.py          # Agents, tools, database logic, and evaluation
+├── project_starter_AI.py       # Alternate deterministic AI implementation
+├── tests/
+│   └── test_workflow.py        # Unit and integration tests
+├── quote_requests.csv          # Historical requests
+├── quote_requests_sample.csv   # Scenario evaluation requests
+├── quotes.csv                  # Historical quote data
+├── munder_difflin.db           # SQLite project database
+├── test_results.csv            # Generated evaluation results
+├── flowchart.md                # Mermaid workflow diagram
+├── EVALUATION_REPORT.md        # Architecture and evaluation analysis
+└── requirements.txt
+```
 
-All the files have been provided in the VS Code workspace on the Udacity platform. Please install the agent orchestration framework of your choice.
+## Requirements
 
-## Local setup instructions
+- Python 3.10 or later is recommended.
+- An OpenAI-compatible API key available to the model client.
+- The project uses the endpoint:
 
-1. Install dependencies
+  ```text
+  https://openai.vocareum.com/v1
+  ```
 
-Make sure you have Python 3.8+ installed.
+## Setup
 
-You can install all required packages using the provided requirements.txt file:
+Create and activate a virtual environment:
 
-`pip install -r requirements.txt`
+```bash
+python -m venv .venv
+source .venv/bin/activate
+```
 
-If you're using smolagents, install it separately:
+Install dependencies:
 
-`pip install smolagents`
+```bash
+pip install -r requirements.txt
+```
 
-For other options like pydantic-ai or npcsh[lite], refer to their documentation.
+Create a `.env` file:
 
-2. Create .env File
+```env
+UDACITY_OPENAI_API_KEY=your_api_key
+```
 
-Add your OpenAI-compatible API key:
+Do not commit `.env` or API keys.
 
-`UDACITY_OPENAI_API_KEY=your_openai_key_here`
+## Run the Evaluation
 
-This project uses a custom OpenAI-compatible proxy hosted at https://openai.vocareum.com/v1.
+From the repository root:
 
-## How to Run the Project
+```bash
+python project_starter.py
+```
 
-Start by defining your agents in the `"YOUR MULTI AGENT STARTS HERE"` section inside `template.py`. Once your agent team is ready:
+The scenario runner:
 
-1. Run the `run_test_scenarios()` function at the bottom of the script.
-2. This will simulate a series of customer requests.
-3. Your system should respond by coordinating inventory checks, generating quotes, and processing orders.
+1. Reinitializes `munder_difflin.db`.
+2. Loads and sorts `quote_requests_sample.csv`.
+3. Processes every request through the agents.
+4. Prints cash, inventory, and per-item responses.
+5. Validates each completed workflow response.
+6. Writes `test_results.csv`.
 
-Output will include:
+Each response stores:
 
-- Agent responses
-- Cash and inventory updates
-- Final financial report
-- A `test_results.csv` file with all interaction logs
+- Request and requested delivery dates
+- Trusted job and event metadata
+- Per-item status
+- Inventory and delivery result
+- Quote, discount, subtotal, total, and pricing explanation
+- Transaction details
+- Evaluation assertions
 
----
+The response column in `test_results.csv` is valid JSON.
 
-## Tips for Success
+## Run Tests
 
-- Start by sketching a **flow diagram** to visualize agent responsibilities and interactions.
-- Test individual agent tools before full orchestration.
-- Always include **dates** in customer requests when passing data between agents.
-- Ensure every quote includes **bulk discounts** and uses past data when available.
-- Use the **exact item names** from the database to avoid transaction failures.
+Run the deterministic test suite:
 
----
+```bash
+python -m unittest tests/test_workflow.py
+```
 
-## Submission Checklist
+Run the optional real-LLM integration tests:
 
-Make sure to submit the following files:
+```bash
+export RUN_LLM_INTEGRATION_TESTS=1
+python -m unittest tests/test_workflow.py
+```
 
-1. Your completed `template.py` or `project_starter.py` with all agent logic
-2. A **workflow diagram** describing your agent architecture and data flow
-3. A `README.txt` or `design_notes.txt` explaining how your system works
-4. Outputs from your test run (like `test_results.csv`)
+The integration tests require `UDACITY_OPENAI_API_KEY`.
 
----
+## Workflow Behavior
+
+For each item:
+
+```text
+Catalog validation
+  -> Clarification required? stop this item
+  -> Inventory check at request_date
+  -> Can shortage arrive by requested_delivery_date?
+       -> No: stop this item
+       -> Yes: quote with deterministic pricing
+  -> Atomic order execution
+```
+
+For an order with insufficient stock:
+
+```text
+Purchase shortage quantity
+Purchase safety-stock quantity
+Record customer sale
+```
+
+The two supplier purchases use independent delivery dates, because including
+safety stock can change the supplier lead-time bracket.
+
+## Safety and Validation
+
+- LLM-selected product names must exist in `paper_supplies`.
+- Invalid quantities and dates are rejected.
+- Discounts must be numeric values between `0` and `1`.
+- Price totals are calculated in Python, not trusted from the LLM.
+- Fulfillment writes are executed in one SQLite transaction.
+- Evaluator assertions verify:
+  - Status values
+  - Exact product mappings
+  - Pricing arithmetic
+  - Transaction types and dates
+  - Integer and unique transaction IDs
+
+## Current Evaluation
+
+The regenerated 20-request evaluation produced:
+
+- 60 line items
+- 34 fulfilled items
+- 12 items unable to meet the requested deadline
+- 14 items requiring clarification
+- 34 sales transactions
+- 51 stock-order transactions
+- 20 responses passing embedded evaluation assertions
+
+See [EVALUATION_REPORT.md](EVALUATION_REPORT.md) for details.
+
+## Known Limitations
+
+- LLM discount recommendations are not yet governed by formal quantity tiers.
+- A quote-acceptance step is not currently required before fulfillment.
+- Catalog variants such as A3 products and specialty colors may require
+  clarification.
+- Real-LLM tests depend on external availability, latency, and pricing.
+- The sample financial model is educational rather than production accounting.
+
+## Future Improvements
+
+1. Add explicit approval before purchase and sale transactions.
+2. Define deterministic discount tiers while retaining LLM explanations.
+3. Add expected outcomes for every scenario row.
+4. Expand catalog variants for common A3/A5 and product specifications.
+5. Track processing cost and latency per agent/request.
+6. Add a customer simulator that uses the scenario role, mood, event, and
+   request to answer clarification questions and negotiate acceptance.
+7. Add a terminal visualization that renders structured agent events with
+   progress indicators; presentation should remain separate from business
+   logic.
+8. Add read-only business-advisor capabilities that analyze completed
+   transactions and recommend inventory, supplier, pricing, and catalog
+   improvements.
+
+The current educational implementation uses five agents. A future production
+version is not required to keep that limit and can introduce dedicated
+Customer and Business Advisor agents. The customer simulator can also remain
+deterministic if no additional LLM is needed for the demonstration.
+
+An enhanced demonstration workflow would be:
+
+```text
+Customer simulator
+  -> Request negotiation
+  -> Five-agent operational workflow
+  -> Structured progress events
+  -> Terminal visualization
+  -> Completed transactions
+  -> Business-advisor recommendations
+```
+
+## License
+
+This repository is an educational project.
