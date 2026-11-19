@@ -2,13 +2,13 @@ request_id,request_date,response
 1,2025-04-01,"Thank you. We reviewed your request for delivery by 2025-04-15.
 
 Order update:
-- 200 unit(s) of Glossy paper
-  Confirmed: $36.00.
+- 200 unit(s) of A4 paper
+  Confirmed: $9.00.
   How we calculated this:
-  - Catalog price: $0.20 x 200 = $40.00.
+  - Catalog price: $0.05 x 200 = $10.00.
   - Bulk discount: 10%.
-  - Final quoted total: $36.00; no tax or separate shipping charge is configured.
-  - Expected fulfillment date: 2025-04-01.
+  - Final quoted total: $9.00; no tax or separate shipping charge is configured.
+  - Expected fulfillment date: 2025-04-02.
 - 100 unit(s) of Cardstock
   Confirmed: $13.50.
   How we calculated this:
@@ -17,11 +17,11 @@ Order update:
   - Final quoted total: $13.50; no tax or separate shipping charge is configured.
   - Expected fulfillment date: 2025-04-01.
 - 100 unit(s) of Colored paper
-  Confirmed: $8.00.
+  Confirmed: $8.50.
   How we calculated this:
   - Catalog price: $0.10 x 100 = $10.00.
-  - Bulk discount: 20%.
-  - Final quoted total: $8.00; no tax or separate shipping charge is configured.
+  - Bulk discount: 15%.
+  - Final quoted total: $8.50; no tax or separate shipping charge is configured.
   - Expected fulfillment date: 2025-04-01.
 
 Summary: 3 of 3 item(s) confirmed."
@@ -36,14 +36,14 @@ Order update:
   - Final quoted total: $125.00; no tax or separate shipping charge is configured.
   - Expected fulfillment date: 2025-04-07.
 - 300 unit(s) of Party streamers
-  Confirmed: $12.00.
+  Confirmed: $13.50.
   How we calculated this:
   - Catalog price: $0.05 x 300 = $15.00.
-  - Bulk discount: 20%.
-  - Final quoted total: $12.00; no tax or separate shipping charge is configured.
+  - Bulk discount: 10%.
+  - Final quoted total: $13.50; no tax or separate shipping charge is configured.
   - Expected fulfillment date: 2025-04-07.
 - 200 balloons
-  More information needed: Please specify the type of balloons you are referring to.
+  More information needed: No catalog item for balloons exists, clarification needed on what type of balloons are requested.
   Next step: confirm the exact product and quantity in catalog units.
 
 Summary: 2 of 3 item(s) confirmed.
@@ -59,11 +59,11 @@ Order update:
   - Final quoted total: $450.00; no tax or separate shipping charge is configured.
   - Expected fulfillment date: 2025-04-11.
 - 5,000 sheets of A3 paper
-  More information needed: A3 paper is not part of the catalog, please specify an alternative.
+  More information needed: A3 paper does not have a specified item in the catalog. Please confirm if an alternative size is acceptable.
   Suggested choices: A4 paper, Letter-sized paper, Cardstock, Colored paper, Glossy paper (plus 20 related catalog options).
 - 500 reams of printer paper
-  More information needed: Please clarify the specific type of printer paper needed as it was not specified in the catalog. Please provide the quantity in catalog units, such as sheets.
-  Suggested choices: Standard copy paper, A4 paper, Letter-sized paper.
+  More information needed: The term 'printer paper' does not specify a catalog item. Please clarify the exact size and type of printer paper required. Please provide the quantity in catalog units, such as sheets.
+  Suggested choices: A4 paper, Letter-sized paper, Cardstock, Colored paper, Glossy paper (plus 20 related catalog options).
 
 Summary: 1 of 3 item(s) confirmed.
 The unresolved items listed above do not prevent confirmed items from being fulfilled."
@@ -71,18 +71,18 @@ The unresolved items listed above do not prevent confirmed items from being fulf
 
 Order update:
 - 500 unit(s) of Cardstock
-  Confirmed: $67.50.
+  Confirmed: $75.00.
   How we calculated this:
   - Catalog price: $0.15 x 500 = $75.00.
-  - Bulk discount: 10%.
-  - Final quoted total: $67.50; no tax or separate shipping charge is configured.
+  - Bulk discount: 0%.
+  - Final quoted total: $75.00; no tax or separate shipping charge is configured.
   - Expected fulfillment date: 2025-04-09.
 - 250 unit(s) of A4 paper
-  Confirmed: $11.25.
+  Confirmed: $12.50.
   How we calculated this:
   - Catalog price: $0.05 x 250 = $12.50.
-  - Bulk discount: 10%.
-  - Final quoted total: $11.25; no tax or separate shipping charge is configured.
+  - Bulk discount: 0%.
+  - Final quoted total: $12.50; no tax or separate shipping charge is configured.
   - Expected fulfillment date: 2025-04-09.
 
 Summary: 2 of 2 item(s) confirmed."
@@ -123,7 +123,7 @@ Order update:
   - Final quoted total: $45.00; no tax or separate shipping charge is configured.
   - Expected fulfillment date: 2025-04-10.
 - 300 sheets of white printer paper
-  More information needed: The customer mentioned white printer paper, but did not specify an exact type from the catalog.
+  More information needed: The customer specified 'white printer paper', but it's unclear whether they mean A4 or Letter-sized size.
   Suggested choices: A4 paper, Letter-sized paper, Standard copy paper, Uncoated paper.
 - 200 unit(s) of Cardstock
   Confirmed: $27.00.
@@ -139,15 +139,15 @@ The unresolved items listed above do not prevent confirmed items from being fulf
 
 Order update:
 - 500 unit(s) of A4 paper
-  Confirmed: $23.75.
+  Confirmed: $22.50.
   How we calculated this:
   - Catalog price: $0.05 x 500 = $25.00.
-  - Bulk discount: 5%.
-  - Final quoted total: $23.75; no tax or separate shipping charge is configured.
+  - Bulk discount: 10%.
+  - Final quoted total: $22.50; no tax or separate shipping charge is configured.
   - Expected fulfillment date: 2025-04-11.
 - 1000 sheets of matte A3 paper
-  More information needed: The request specifies A3 paper, which does not match any exact catalog item. Please clarify if A4 paper is acceptable.
-  Suggested choices: A4 paper, Matte paper, Glossy paper.
+  More information needed: Please clarify what catalog item corresponds to A3 paper. A3 paper is not listed in the provided catalog.
+  Next step: confirm the exact product and quantity in catalog units.
 - 300 unit(s) of Large poster paper (24x36 inches)
   Confirmed: $270.00.
   How we calculated this:
@@ -156,11 +156,11 @@ Order update:
   - Final quoted total: $270.00; no tax or separate shipping charge is configured.
   - Expected fulfillment date: 2025-04-07.
 - 200 unit(s) of Cardstock
-  Confirmed: $27.00.
+  Confirmed: $30.00.
   How we calculated this:
   - Catalog price: $0.15 x 200 = $30.00.
-  - Bulk discount: 10%.
-  - Final quoted total: $27.00; no tax or separate shipping charge is configured.
+  - Bulk discount: 0%.
+  - Final quoted total: $30.00; no tax or separate shipping charge is configured.
   - Expected fulfillment date: 2025-04-11.
 
 Summary: 3 of 4 item(s) confirmed.
@@ -169,12 +169,12 @@ The unresolved items listed above do not prevent confirmed items from being fulf
 
 Order update:
 - 500 unit(s) of Glossy paper
-  Confirmed: $80.00.
+  Confirmed: $90.00.
   How we calculated this:
   - Catalog price: $0.20 x 500 = $100.00.
-  - Bulk discount: 20%.
-  - Final quoted total: $80.00; no tax or separate shipping charge is configured.
-  - Expected fulfillment date: 2025-04-11.
+  - Bulk discount: 10%.
+  - Final quoted total: $90.00; no tax or separate shipping charge is configured.
+  - Expected fulfillment date: 2025-04-08.
 - 1,000 unit(s) of Matte paper
   Confirmed: $162.00.
   How we calculated this:
@@ -183,7 +183,7 @@ Order update:
   - Final quoted total: $162.00; no tax or separate shipping charge is configured.
   - Expected fulfillment date: 2025-04-11.
 - 2000 sheets of A5 colored paper
-  More information needed: A5 paper is not directly in the catalog; please clarify if A5 colored paper should be acceptable as colored paper. Please provide the quantity in catalog units, such as sheets.
+  More information needed: A5 size doesn't directly match a catalog item, please clarify if A4 colored paper is acceptable.
   Suggested choices: Colored paper.
 - 3,000 unit(s) of Recycled paper
   Confirmed: $216.00.
@@ -199,7 +199,7 @@ The unresolved items listed above do not prevent confirmed items from being fulf
 
 Order update:
 - 200 unit(s) of A4 paper
-  Not confirmed: we can deliver this item on 2025-04-11, not by 2025-04-10.
+  Not confirmed: we can deliver this item on 2025-04-12, not by 2025-04-10.
   Next step: approve the later date or remove this item from the request.
 - 100 unit(s) of Glossy paper
   Confirmed: $18.00.
@@ -207,9 +207,9 @@ Order update:
   - Catalog price: $0.20 x 100 = $20.00.
   - Bulk discount: 10%.
   - Final quoted total: $18.00; no tax or separate shipping charge is configured.
-  - Expected fulfillment date: 2025-04-07.
+  - Expected fulfillment date: 2025-04-11.
 - 50 packets of 100% recycled kraft paper envelopes
-  More information needed: The specific type of paper envelopes (e.g., size, color) is unclear. Please provide the quantity in catalog units, such as sheets.
+  More information needed: Clarification required on the exact packaging and attributes of 100% recycled kraft paper envelopes. Please provide the quantity in catalog units, such as sheets.
   Suggested choices: Envelopes.
 
 Summary: 1 of 3 item(s) confirmed.
@@ -230,11 +230,11 @@ The unresolved items listed above do not prevent confirmed items from being fulf
 
 Order update:
 - 200 unit(s) of Cardstock
-  Confirmed: $27.00.
+  Confirmed: $30.00.
   How we calculated this:
   - Catalog price: $0.15 x 200 = $30.00.
-  - Bulk discount: 10%.
-  - Final quoted total: $27.00; no tax or separate shipping charge is configured.
+  - Bulk discount: 0%.
+  - Final quoted total: $30.00; no tax or separate shipping charge is configured.
   - Expected fulfillment date: 2025-04-12.
 - 500 unit(s) of Standard copy paper
   Confirmed: $18.00.
@@ -244,11 +244,11 @@ Order update:
   - Final quoted total: $18.00; no tax or separate shipping charge is configured.
   - Expected fulfillment date: 2025-04-12.
 - 100 unit(s) of Paper napkins
-  Confirmed: $2.00.
+  Confirmed: $1.80.
   How we calculated this:
   - Catalog price: $0.02 x 100 = $2.00.
-  - Bulk discount: 0%.
-  - Final quoted total: $2.00; no tax or separate shipping charge is configured.
+  - Bulk discount: 10%.
+  - Final quoted total: $1.80; no tax or separate shipping charge is configured.
   - Expected fulfillment date: 2025-04-09.
 
 Summary: 3 of 3 item(s) confirmed."
@@ -256,18 +256,18 @@ Summary: 3 of 3 item(s) confirmed."
 
 Order update:
 - 500 unit(s) of Glossy paper
-  Confirmed: $90.00.
+  Confirmed: $100.00.
   How we calculated this:
   - Catalog price: $0.20 x 500 = $100.00.
-  - Bulk discount: 10%.
-  - Final quoted total: $90.00; no tax or separate shipping charge is configured.
+  - Bulk discount: 0%.
+  - Final quoted total: $100.00; no tax or separate shipping charge is configured.
   - Expected fulfillment date: 2025-04-12.
 - 300 unit(s) of Cardstock
-  Confirmed: $40.50.
+  Confirmed: $45.00.
   How we calculated this:
   - Catalog price: $0.15 x 300 = $45.00.
-  - Bulk discount: 10%.
-  - Final quoted total: $40.50; no tax or separate shipping charge is configured.
+  - Bulk discount: 0%.
+  - Final quoted total: $45.00; no tax or separate shipping charge is configured.
   - Expected fulfillment date: 2025-04-12.
 
 Summary: 2 of 2 item(s) confirmed."
@@ -297,12 +297,8 @@ Order update:
   Not confirmed: we can deliver this item on 2025-04-16, not by 2025-04-15.
   Next step: approve the later date or remove this item from the request.
 - 2,000 unit(s) of Poster paper
-  Confirmed: $450.00.
-  How we calculated this:
-  - Catalog price: $0.25 x 2,000 = $500.00.
-  - Bulk discount: 10%.
-  - Final quoted total: $450.00; no tax or separate shipping charge is configured.
-  - Expected fulfillment date: 2025-04-16.
+  Not confirmed: we can deliver this item on 2025-04-16, not by 2025-04-15.
+  Next step: approve the later date or remove this item from the request.
 - 500 unit(s) of Cardstock
   Confirmed: $67.50.
   How we calculated this:
@@ -311,7 +307,7 @@ Order update:
   - Final quoted total: $67.50; no tax or separate shipping charge is configured.
   - Expected fulfillment date: 2025-04-13.
 
-Summary: 2 of 3 item(s) confirmed.
+Summary: 1 of 3 item(s) confirmed.
 The unresolved items listed above do not prevent confirmed items from being fulfilled."
 15,2025-04-12,"Thank you. We reviewed your request for delivery by 2025-04-15.
 
@@ -320,10 +316,10 @@ Order update:
   Not confirmed: we can deliver this item on 2025-04-19, not by 2025-04-15.
   Next step: approve the later date or remove this item from the request.
 - 5,000 unit(s) of Colored paper
-  Not confirmed: we can deliver this item on 2025-04-19, not by 2025-04-15.
+  Not confirmed: we can deliver this item on 2025-04-18, not by 2025-04-15.
   Next step: approve the later date or remove this item from the request.
 - 500 reams of cardboard for signage
-  More information needed: Clarification is needed on the specific catalog item for ""cardboard for signage"". Please provide the quantity in catalog units, such as sheets.
+  More information needed: Please provide clarification on the type of cardboard for signage as it is not found in the catalog. Please provide the quantity in catalog units, such as sheets.
   Next step: confirm the exact product and quantity in catalog units.
 
 Summary: 0 of 3 item(s) confirmed.
@@ -332,13 +328,13 @@ The unresolved items listed above do not prevent confirmed items from being fulf
 
 Order update:
 - 500 unit(s) of A4 paper
-  Not confirmed: we can deliver this item on 2025-04-16, not by 2025-04-15.
+  Not confirmed: we can deliver this item on 2025-04-17, not by 2025-04-15.
   Next step: approve the later date or remove this item from the request.
 - 200 unit(s) of Construction paper
   Not confirmed: we can deliver this item on 2025-04-17, not by 2025-04-15.
   Next step: approve the later date or remove this item from the request.
 - 100 sheets of poster board
-  More information needed: The term 'poster board' is not an exact match, clarification needed on whether the customer means 'Poster paper'.
+  More information needed: Clarification needed for 'poster board' as it's not listed in catalog. Suggested alternative is 'Poster paper'.
   Suggested choices: Poster paper.
 
 Summary: 0 of 3 item(s) confirmed.
@@ -347,14 +343,14 @@ The unresolved items listed above do not prevent confirmed items from being fulf
 
 Order update:
 - 1,000 unit(s) of A4 paper
-  Not confirmed: we can deliver this item on 2025-04-18, not by 2025-04-15.
+  Not confirmed: we can deliver this item on 2025-04-17, not by 2025-04-15.
   Next step: approve the later date or remove this item from the request.
 - 500 unit(s) of Colored paper
   Not confirmed: we can deliver this item on 2025-04-18, not by 2025-04-15.
   Next step: approve the later date or remove this item from the request.
-- 2000 table napkins (white)
-  More information needed: Clarification needed for the exact type of table napkins as the catalog has 'Paper napkins' but not specifically 'table napkins'.
-  Suggested choices: Paper napkins.
+- 2,000 unit(s) of Paper napkins
+  Not confirmed: we can deliver this item on 2025-04-21, not by 2025-04-15.
+  Next step: approve the later date or remove this item from the request.
 - 1,000 unit(s) of Paper cups
   Not confirmed: we can deliver this item on 2025-04-18, not by 2025-04-15.
   Next step: approve the later date or remove this item from the request.
@@ -379,14 +375,14 @@ Order update:
   - Final quoted total: $67.50; no tax or separate shipping charge is configured.
   - Expected fulfillment date: 2025-04-14.
 - 1000 sheets of standard printing paper
-  More information needed: Clarification needed on the exact type of standard printing paper required, as several options exist in catalog.
-  Suggested choices: A4 paper, Letter-sized paper, Standard copy paper, Uncoated paper.
+  More information needed: The specified product 'standard printing paper' does not match any items in the catalog.
+  Next step: confirm the exact product and quantity in catalog units.
 - 200 unit(s) of Colored paper
-  Confirmed: $18.00.
+  Confirmed: $17.00.
   How we calculated this:
   - Catalog price: $0.10 x 200 = $20.00.
-  - Bulk discount: 10%.
-  - Final quoted total: $18.00; no tax or separate shipping charge is configured.
+  - Bulk discount: 15%.
+  - Final quoted total: $17.00; no tax or separate shipping charge is configured.
   - Expected fulfillment date: 2025-04-18.
 
 Summary: 2 of 3 item(s) confirmed.
@@ -394,12 +390,12 @@ The unresolved items listed above do not prevent confirmed items from being fulf
 19,2025-04-15,"Thank you. We reviewed your request for delivery by 2025-04-20.
 
 Order update:
-- 2,000 unit(s) of Glossy paper
+- 2,000 unit(s) of A4 paper
   Not confirmed: we can deliver this item on 2025-04-22, not by 2025-04-20.
   Next step: approve the later date or remove this item from the request.
 - 1500 sheets of A3 matte paper
-  More information needed: Clarification needed on the exact catalog name for A3 matte paper. Please provide the quantity in catalog units, such as sheets.
-  Next step: confirm the exact product and quantity in catalog units.
+  More information needed: A3 paper is not listed in the catalog. Please clarify if A3 can be substituted with another available size.
+  Suggested choices: Matte paper.
 - 1,000 unit(s) of Cardstock
   Confirmed: $135.00.
   How we calculated this:
@@ -414,17 +410,17 @@ The unresolved items listed above do not prevent confirmed items from being fulf
 
 Order update:
 - 5,000 unit(s) of Flyers
-  Confirmed: $750.00.
+  Confirmed: $675.00.
   How we calculated this:
   - Catalog price: $0.15 x 5,000 = $750.00.
-  - Bulk discount: 0%.
-  - Final quoted total: $750.00; no tax or separate shipping charge is configured.
+  - Bulk discount: 10%.
+  - Final quoted total: $675.00; no tax or separate shipping charge is configured.
   - Expected fulfillment date: 2025-04-24.
 - 2,000 posters
-  More information needed: Clarification needed for the exact type of poster requested.
-  Suggested choices: Poster paper.
+  More information needed: Clarification needed: Specific type of poster paper required or specifications (size, finish, etc.).
+  Suggested choices: Poster paper, Large poster paper (24x36 inches), 220 gsm poster paper.
 - 10,000 tickets
-  More information needed: Clarification needed for the exact type of tickets requested.
+  More information needed: Clarification needed: Are tickets considered a type of paper supply? Please specify.
   Next step: confirm the exact product and quantity in catalog units.
 
 Summary: 1 of 3 item(s) confirmed.
