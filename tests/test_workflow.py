@@ -126,20 +126,24 @@ class WorkflowTests(unittest.TestCase):
         self.assertTrue(project.item_exists("Paper cups"))
         self.assertFalse(project.item_exists("Not a catalog item"))
 
-        available = project.get_stock_inventory("2025-01-01", "A4 paper", 2)
+        available = project.get_stock_inventory(
+            "2025-01-01", "A4 paper", 2, "2025-01-01"
+        )
         self.assertTrue(available["exists"])
         self.assertEqual(available["current_stock"], 3)
         self.assertTrue(available["enough_stock"])
         self.assertEqual(available["shortage"], 0)
 
-        unknown = project.get_stock_inventory("2025-01-01", "Not a catalog item", 2)
+        unknown = project.get_stock_inventory(        "2025-01-01", "Not a catalog item", 2, "2025-01-01")
         self.assertEqual(
             unknown,
             {"item_name": "Not a catalog item", "item_exists": False},
         )
 
     def test_inventory_agent_tool_reports_shortage_and_delivery_date(self):
-        result = project.get_stock_inventory("2025-01-01", "A4 paper", 10)
+        result = project.get_stock_inventory(
+            "2025-01-01", "A4 paper", 10, "2025-01-01"
+        )
         self.assertTrue(result["exists"])
         self.assertEqual(result["requested_quantity"], 10)
         self.assertEqual(result["current_stock"], 3)
@@ -150,8 +154,6 @@ class WorkflowTests(unittest.TestCase):
         expected_tools = {
             project.InventoryAgent: {
                 "get_stock_inventory",
-                "get_min_stock_level",
-                "create_transaction",
             },
             project.QuoteAgent: {
                 "search_quote_history",
@@ -159,7 +161,11 @@ class WorkflowTests(unittest.TestCase):
                 "get_cash_balance",
                 "generate_financial_report",
             },
-            project.OrderAgent: {"reorder_item", "create_transaction"},
+            project.OrderAgent: {
+                "reorder_item",
+                "create_transaction",
+                "get_min_stock_level",
+            },
         }
         for agent_type, expected in expected_tools.items():
             with self.subTest(agent=agent_type.__name__):
@@ -180,18 +186,147 @@ class WorkflowTests(unittest.TestCase):
 
     def test_handle_request_stops_before_fulfillment_when_stock_is_short(self):
         agent = project.OrchestrationAgent(Mock())
-        with patch.object(
-            agent, "run", return_value={"status": "awaiting_acceptance"}
-        ) as run:
-            result = agent.handle_request("I need 10 A4 paper")
+        processed = {
+            "items": [
+                {
+                    "original_name": "10 A4 sheets",
+                    "item_name": "A4 paper",
+                    "quantity": 10,
+                    "requested_attributes": ["A4"],
+                    "candidates": [],
+                    "clarification_required": False,
+                    "clarification_message": "",
+                },
+                {
+                    "original_name": "200 balloons",
+                    "item_name": None,
+                    "quantity": 200,
+                    "requested_attributes": [],
+                    "candidates": [],
+                    "clarification_required": True,
+                    "clarification_message": "No matching catalog item.",
+                },
+            ],
+            "order_date": "2025-01-01",
+            "job": "manager",
+            "event": "meeting",
+            "needs_clarification": True,
+        }
+        inventory = {
+            "item_name": "A4 paper",
+            "exists": True,
+            "requested_quantity": 10,
+            "current_stock": 3,
+            "enough_stock": False,
+            "shortage": 7,
+            "delivery_date": "2025-01-05",
+            "order_will_be_fulfilled_on_time": False,
+        }
+        quote = {
+            "item_name": "A4 paper",
+            "requested_quantity": 10,
+            "discount": 0,
+            "total_price": 0.5,
+        }
 
-        self.assertEqual(result, {"status": "awaiting_acceptance"})
-        run.assert_called_once()
-        prompt = run.call_args.args[0]
-        self.assertIn("If enough_stock is false", prompt)
-        self.assertIn("do NOT call finalize_order", prompt)
-        self.assertIn("awaiting_acceptance", prompt)
-        self.assertIn("before the supplier reorder", prompt)
+        with (
+            patch.object(
+                agent.tools["process_request"], "forward", return_value=processed
+            ),
+            patch.object(
+                agent.tools["check_inventory"], "forward", return_value=inventory
+            ) as check_inventory,
+            patch.object(
+                agent.tools["get_pricing"], "forward", return_value=quote
+            ) as get_pricing,
+            patch.object(
+                agent.tools["finalize_order"], "forward"
+            ) as finalize_order,
+        ):
+            result = agent.handle_request("mixed request")
+
+        self.assertTrue(result["needs_clarification"])
+        check_inventory.assert_called_once()
+        get_pricing.assert_not_called()
+        finalize_order.assert_not_called()
+        valid_item, blocked_item = result["items"]
+        self.assertEqual(valid_item["status"], "cannot_deliver_on_time")
+        self.assertEqual(blocked_item["status"], "needs_clarification")
+        self.assertEqual(blocked_item["original_name"], "200 balloons")
+
+    def test_delivery_date_gate_sends_on_time_shortage_to_order_agent(self):
+        agent = project.OrchestrationAgent(Mock())
+        processed = {
+            "items": [
+                {
+                    "original_name": "10 A4 sheets",
+                    "item_name": "A4 paper",
+                    "quantity": 10,
+                    "clarification_required": False,
+                    "clarification_message": "",
+                    "candidates": [],
+                }
+            ],
+            "order_date": "2025-01-05",
+            "job": "manager",
+            "event": "meeting",
+            "needs_clarification": False,
+        }
+        inventory = {
+            "item_name": "A4 paper",
+            "exists": True,
+            "requested_quantity": 10,
+            "current_stock": 3,
+            "enough_stock": False,
+            "shortage": 7,
+            "delivery_date": "2025-01-05",
+            "order_will_be_fulfilled_on_time": True,
+        }
+        quote = {
+            "item_name": "A4 paper",
+            "requested_quantity": 10,
+            "discount": 0,
+            "total_price": 0.5,
+        }
+
+        with (
+            patch.object(
+                agent.tools["process_request"], "forward", return_value=processed
+            ),
+            patch.object(
+                agent.tools["check_inventory"], "forward", return_value=inventory
+            ),
+            patch.object(
+                agent.tools["get_pricing"], "forward", return_value=quote
+            ) as get_pricing,
+            patch.object(
+                agent.tools["finalize_order"],
+                "forward",
+                return_value={
+                    "item_name": "A4 paper",
+                    "requested_quantity": 10,
+                    "transaction_type": "sales",
+                    "status": "fulfilled",
+                },
+            ) as finalize_order,
+        ):
+            result = agent.handle_request("shortage request")
+
+        get_pricing.assert_called_once()
+        finalize_order.assert_called_once()
+        self.assertEqual(result["items"][0]["status"], "fulfilled")
+
+    def test_can_fulfill_by_request_date_is_deterministic(self):
+        on_time = {
+            "exists": True,
+            "enough_stock": False,
+            "delivery_date": "2025-01-05",
+        }
+        late = {**on_time, "delivery_date": "2025-01-06"}
+        self.assertTrue(
+            project.can_fulfill_by_request_date(on_time, "2025-01-05")
+        )
+        self.assertFalse(project.can_fulfill_by_request_date(late, "2025-01-05"))
 
     def test_orchestrator_tools_delegate_and_return_structured_responses(self):
         agent = project.OrchestrationAgent(Mock())
@@ -215,11 +350,21 @@ class WorkflowTests(unittest.TestCase):
                 "request_processor_agent",
                 {"request": "I need 10 A4 sheets"},
                 {
-                    "item_name": "A4 paper",
-                    "quantity": 10,
+                    "items": [
+                        {
+                            "original_name": "10 A4 sheets",
+                            "item_name": "A4 paper",
+                            "quantity": 10,
+                            "requested_attributes": ["A4"],
+                            "candidates": [],
+                            "clarification_required": False,
+                            "clarification_message": "",
+                        }
+                    ],
                     "order_date": "2025-01-01",
                     "job": "manager",
                     "event": "meeting",
+                    "needs_clarification": False,
                 },
                 ("I need 10 A4 sheets",),
             ),
@@ -235,6 +380,7 @@ class WorkflowTests(unittest.TestCase):
                     "enough_stock": False,
                     "shortage": 7,
                     "delivery_date": "2025-01-01",
+                    "order_will_be_fulfilled_on_time": False,
                 },
                 ("A4 paper", "10"),
             ),
@@ -330,6 +476,70 @@ class WorkflowTests(unittest.TestCase):
                         with self.assertRaises(error_type):
                             agent.tools[tool_name](**arguments)
 
+    def test_validate_extracted_request_blocks_only_problematic_item(self):
+        result = project.validate_extracted_request(
+            {
+                "items": [
+                    {
+                        "original_name": "10 A4 sheets",
+                        "item_name": "A4 paper",
+                        "quantity": 10,
+                        "requested_attributes": ["A4"],
+                        "candidates": [],
+                        "clarification_required": False,
+                        "clarification_message": "",
+                    },
+                    {
+                        "original_name": "2 packs of specialty material",
+                        "item_name": None,
+                        "quantity": None,
+                        "requested_attributes": [],
+                        "candidates": ["Heavyweight paper", "250 gsm cardstock"],
+                        "clarification_required": True,
+                        "clarification_message": "Package size is missing.",
+                    },
+                ],
+                "order_date": "2025-01-01",
+                "job": "manager",
+                "event": "meeting",
+                "needs_clarification": False,
+            }
+        )
+
+        valid_item, blocked_item = result["items"]
+        self.assertFalse(valid_item["clarification_required"])
+        self.assertTrue(blocked_item["clarification_required"])
+        self.assertEqual(blocked_item["item_name"], None)
+        self.assertIn("Package size is missing", blocked_item["clarification_message"])
+        self.assertTrue(result["needs_clarification"])
+
+    def test_validate_extracted_request_rejects_unknown_catalog_mapping(self):
+        result = project.validate_extracted_request(
+            {
+                "items": [
+                    {
+                        "original_name": "heavy cardstock",
+                        "item_name": "Heavy cardstock",
+                        "quantity": 100,
+                        "requested_attributes": ["heavy", "white"],
+                        "candidates": ["Cardstock", "250 gsm cardstock"],
+                        "clarification_required": False,
+                        "clarification_message": "",
+                    }
+                ],
+                "order_date": "2025-01-01",
+                "job": "manager",
+                "event": "meeting",
+                "needs_clarification": False,
+            }
+        )
+
+        item = result["items"][0]
+        self.assertIsNone(item["item_name"])
+        self.assertTrue(item["clarification_required"])
+        self.assertIn("not an exact catalog item", item["clarification_message"])
+        self.assertTrue(result["needs_clarification"])
+
     def test_minimum_stock_lookup(self):
         self.assertEqual(project.get_min_stock_level("A4 paper"), 2)
         with self.assertRaisesRegex(ValueError, "Item not found"):
@@ -337,7 +547,7 @@ class WorkflowTests(unittest.TestCase):
 
     def test_reorder_rejects_nonpositive_quantity(self):
         with self.assertRaisesRegex(ValueError, "Quantity must be greater than zero"):
-            project.reorder_item("A4 paper", 0, "2025-01-01")
+            project.reorder_item("A4 paper", 0, "2025-01-01", "2025-01-01")
 
     def test_order_agent_tool_reorders_shortage_and_restores_minimum_stock(self):
         stock = {
@@ -347,7 +557,9 @@ class WorkflowTests(unittest.TestCase):
             "min_stock_level": 2,
         }
         with patch.object(project, "get_stock_inventory", return_value=stock):
-            result = project.reorder_item("A4 paper", 20, "2025-01-01")
+            result = project.reorder_item(
+                "A4 paper", 20, "2025-01-01", "2025-01-01"
+            )
         self.assertEqual(result["reordered_quantity"], 17)
         self.assertEqual(result["delivery_date"], "2025-01-02")
 
@@ -366,6 +578,36 @@ class WorkflowTests(unittest.TestCase):
                     project.get_supplier_delivery_date("2025-01-01", quantity),
                     expected_date,
                 )
+
+    def test_supplier_delivery_date_rejects_invalid_request_date(self):
+        with self.assertRaisesRegex(ValueError, "Invalid request date"):
+            project.get_supplier_delivery_date("not-a-date", 10)
+
+    def test_quote_history_respects_request_date(self):
+        with self.engine.begin() as conn:
+            conn.execute(
+                text("""
+                INSERT INTO quote_requests (id, response)
+                VALUES (2, 'Future A4 paper request')
+                """)
+            )
+            conn.execute(
+                text("""
+                INSERT INTO quotes (
+                    request_id, total_amount, quote_explanation, job_type,
+                    order_size, event_type, order_date
+                )
+                VALUES (
+                    2, 20.0, 'Future A4 paper quote', 'manager',
+                    'large', 'conference', '2025-01-03'
+                )
+                """)
+            )
+
+        history = project.search_quote_history(
+            ["A4 paper"], as_of_date="2025-01-01"
+        )
+        self.assertEqual([quote["total_amount"] for quote in history], [10.0])
 
     def test_create_transaction_persists_valid_transaction_and_rejects_bad_type(self):
         transaction_id = project.create_transaction(
@@ -553,11 +795,18 @@ class LLMIntegrationTests(unittest.TestCase):
 
         self.assertIsInstance(response, dict)
 
-        expected_fields = {"item_name", "quantity", "order_date", "job", "event"}
+        expected_fields = {
+            "items",
+            "order_date",
+            "job",
+            "event",
+            "needs_clarification",
+        }
         self.assertEqual(set(response), expected_fields)
-
-        self.assertEqual(response["item_name"], "A4 paper")
-        self.assertEqual(response["quantity"], 10)
+        self.assertFalse(response["needs_clarification"])
+        self.assertEqual(len(response["items"]), 1)
+        self.assertEqual(response["items"][0]["item_name"], "A4 paper")
+        self.assertEqual(response["items"][0]["quantity"], 10)
         self.assertEqual(response["order_date"], "2025-01-01")
         self.assertEqual(response["job"], "office manager")
         self.assertEqual(response["event"], "meeting")
@@ -577,6 +826,7 @@ class LLMIntegrationTests(unittest.TestCase):
             "enough_stock",
             "shortage",
             "delivery_date",
+            "order_will_be_fulfilled_on_time",
         }
         self.assertIsInstance(response, dict)
         self.assertEqual(set(response), expected_fields)

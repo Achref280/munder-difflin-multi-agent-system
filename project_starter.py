@@ -656,7 +656,9 @@ def generate_financial_report(as_of_date: str | datetime) -> dict:
 
 
 @tool
-def search_quote_history(search_terms: list[str], limit: int = 5) -> list[dict]:
+def search_quote_history(
+    search_terms: list[str], limit: int = 5, as_of_date: str = ""
+) -> list[dict]:
     """
     Retrieve a list of historical quotes that match any of the provided search terms.
 
@@ -667,6 +669,7 @@ def search_quote_history(search_terms: list[str], limit: int = 5) -> list[dict]:
     Args:
         search_terms (List[str]): List of terms to match against customer requests and explanations.
         limit (int, optional): Maximum number of quote records to return. Default is 5.
+        as_of_date (str, optional): Exclude quotes created after this date.
 
     Returns:
         List[Dict]: A list of matching quotes, each represented as a dictionary with fields:
@@ -692,6 +695,15 @@ def search_quote_history(search_terms: list[str], limit: int = 5) -> list[dict]:
 
     # Combine conditions; fallback to always-true if no terms provided
     where_clause = " AND ".join(conditions) if conditions else "1=1"
+    if as_of_date:
+        try:
+            datetime.fromisoformat(as_of_date.split("T")[0])
+        except ValueError as exc:
+            raise ValueError(
+                f"Invalid request date '{as_of_date}'; expected YYYY-MM-DD."
+            ) from exc
+        where_clause += " AND q.order_date <= :as_of_date"
+        params["as_of_date"] = as_of_date
 
     # Final SQL query to join quotes with quote_requests
     query = f"""
@@ -849,6 +861,110 @@ def parse_agent_response(response: Any) -> dict[str, Any]:
     return data
 
 
+def validate_extracted_request(data: dict[str, Any]) -> dict[str, Any]:
+    """Validate catalog mappings without rejecting unrelated valid line items."""
+    required_request_fields = {"items", "order_date", "job", "event"}
+    missing_request_fields = required_request_fields - data.keys()
+    if missing_request_fields:
+        raise ValueError(
+            "Missing required request fields: "
+            + ", ".join(sorted(missing_request_fields))
+        )
+
+    order_date = data["order_date"]
+    if not isinstance(order_date, str):
+        raise ValueError("order_date must be a YYYY-MM-DD string")
+    try:
+        datetime.fromisoformat(order_date)
+    except ValueError as exc:
+        raise ValueError(
+            f"Invalid order date '{order_date}'; expected YYYY-MM-DD."
+        ) from exc
+
+    items = data["items"]
+    if not isinstance(items, list) or not items:
+        raise ValueError("Request must contain at least one item")
+
+    catalog_names = {item["item_name"] for item in paper_supplies}
+    validated_items = []
+    for item_index, item in enumerate(items, start=1):
+        if not isinstance(item, dict):
+            raise ValueError(f"Item {item_index} must be an object")
+
+        original_name = item.get("original_name")
+        if not isinstance(original_name, str) or not original_name.strip():
+            raise ValueError(f"Item {item_index} is missing original_name")
+
+        validated = dict(item)
+        item_name = validated.get("item_name")
+        quantity = validated.get("quantity")
+        clarification_required = bool(
+            validated.get("clarification_required", False)
+        )
+        reasons = []
+
+        if item_name is None:
+            reasons.append("No catalog item was confidently identified")
+        elif not isinstance(item_name, str) or item_name not in catalog_names:
+            reasons.append(f"'{item_name}' is not an exact catalog item")
+            validated["item_name"] = None
+
+        if isinstance(quantity, bool) or not isinstance(quantity, int) or quantity <= 0:
+            reasons.append("Quantity could not be converted to a positive catalog unit")
+            validated["quantity"] = None
+
+        if reasons:
+            clarification_required = True
+            existing_message = validated.get("clarification_message")
+            validated["clarification_message"] = (
+                f"{existing_message} " if isinstance(existing_message, str) else ""
+            ) + ". ".join(reasons) + "."
+
+        candidates = validated.get("candidates", [])
+        if not isinstance(candidates, list):
+            candidates = []
+        validated["candidates"] = [
+            candidate
+            for candidate in candidates
+            if isinstance(candidate, str) and candidate in catalog_names
+        ]
+        validated["original_name"] = original_name.strip()
+        validated["clarification_required"] = clarification_required
+        validated.setdefault("clarification_message", "")
+        requested_attributes = validated.setdefault("requested_attributes", [])
+        if not isinstance(requested_attributes, list):
+            validated["requested_attributes"] = []
+        validated_items.append(validated)
+
+    return {
+        **data,
+        "items": validated_items,
+        "needs_clarification": any(
+            item["clarification_required"] for item in validated_items
+        ),
+    }
+
+
+def can_fulfill_by_request_date(
+    inventory: dict[str, Any], order_date: str
+) -> bool:
+    """Return whether inventory can fulfill the item no later than the request date."""
+    if inventory.get("exists") is not True:
+        return False
+    if inventory.get("enough_stock") is True:
+        return True
+
+    delivery_date = inventory.get("delivery_date")
+    if not isinstance(delivery_date, str):
+        return False
+    try:
+        return datetime.fromisoformat(delivery_date) <= datetime.fromisoformat(
+            order_date
+        )
+    except ValueError as exc:
+        raise ValueError("Delivery and request dates must use ISO format") from exc
+
+
 class RequestProcessorAgent(ToolCallingAgent):
     """Agent responsible for processing requests."""
 
@@ -924,29 +1040,55 @@ class OrchestrationAgent(ToolCallingAgent):
                 request: The customer's order request
 
             Returns:
-                Processed request information with item_name, quantity, order_date, job, and event.
+                Extracted request information, including validated and blocked items.
             """
             response = self.request_processor_agent.run(f"""
                 The customer says: "{request}"
 
-                First, identify:
-                1. What items they want
-                2. what size they want small large or medium
-                3. for what event they are ordering
-                4. the job of the customer
+                Extract every requested product as a separate line item.
+                Select item_name only from this exact catalog:
+                {json.dumps(paper_supplies)}
 
-                return the extracted information as a structured response containing item_name, quantity, order_date, job, and event.
+                Rules:
+                - Never invent an item_name.
+                - Preserve the customer's wording in original_name.
+                - Keep requested size, color, finish, weight, and other details in
+                  requested_attributes.
+                - Do not invent attributes that the customer did not state.
+                - Convert explicit packages to catalog units when the conversion is
+                  stated, such as 10 reams with 500 sheets per ream = 5,000 sheets.
+                - Never guess a package conversion.
+                - If no single catalog item can be selected confidently, set item_name
+                  to null and clarification_required to true. Candidate values must
+                  be exact names from the supplied catalog. Explain what clarification
+                  is needed.
+                - A problematic item must not block valid items in the same request.
+                - Extract the order date, customer job, and event from the full request
+                  or its appended context. Phrases such as "for a meeting" identify
+                  the event as "meeting"; do not return "unknown" when the value is
+                  explicitly present.
+
+                Return only valid JSON:
+                {{
+                  "items": [
+                    {{
+                      "original_name": "customer's product wording",
+                      "item_name": "exact catalog name or null",
+                      "quantity": positive_integer_in_catalog_units_or_null,
+                      "requested_attributes": ["A4", "white"],
+                      "candidates": ["possible exact catalog names"],
+                      "clarification_required": false,
+                      "clarification_message": ""
+                    }}
+                  ],
+                  "order_date": "YYYY-MM-DD",
+                  "job": "customer job or unknown",
+                  "event": "event or unknown",
+                  "needs_clarification": false
+                }}
                 """)
             data = parse_agent_response(response)
-            if (
-                "item_name" not in data
-                or "quantity" not in data
-                or "order_date" not in data
-                or "job" not in data
-                or "event" not in data
-            ):
-                raise ValueError("Missing required fields in response")
-            return data
+            return validate_extracted_request(data)
 
         @tool
         def check_inventory(
@@ -1033,6 +1175,8 @@ class OrchestrationAgent(ToolCallingAgent):
                 The customer wants: "{request_information}"
 
                 Get the pricing for the requested items.
+                When searching quote history, include only quotes on or before
+                the request's order_date.
                 Return only valid JSON with item_name, requested_quantity, discount, and total_price.
                 Use double quotes around all keys and string values.
                 """)
@@ -1107,26 +1251,79 @@ class OrchestrationAgent(ToolCallingAgent):
         )
 
     def handle_request(self, request_with_date):
-        return self.run(f"""
-            The customer wants: "{request_with_date}"
+        processed = self.tools["process_request"](request_with_date)
+        item_results = []
 
-            Follow this workflow:
-            1. Use process_request to extract the order fields.
-            2. Pass its item name, quantity, and order date to check_inventory.
-            3. If the item does not exist, stop and ask for a valid catalog item.
-            4. Use get_pricing with the item name, quantity, order date, job, and event.
-            5. If enough_stock is true, call finalize_order with the item name,
-               quantity, order date, and quoted total_price.
-            6. If enough_stock is false, do NOT call finalize_order and do NOT
-               create sales or supplier transactions. Return a quote marked
-               awaiting_acceptance that explains the available quantity, shortage,
-               requested quantity, estimated delivery date, discount, and total price.
-            7. In the shortage case, clearly state that the customer must accept
-               the quote before the supplier reorder and fulfillment can be executed.
+        for item in processed["items"]:
+            if item["clarification_required"]:
+                item_results.append(
+                    {
+                        "original_name": item["original_name"],
+                        "item_name": None,
+                        "status": "needs_clarification",
+                        "message": item["clarification_message"],
+                        "candidates": item["candidates"],
+                    }
+                )
+                continue
 
-            Return a concise JSON summary of the inventory, quote, fulfillment status,
-            and any required next action.
-            """)
+            inventory = self.tools["check_inventory"](
+                item_name=item["item_name"],
+                quantity=item["quantity"],
+                order_date=processed["order_date"],
+            )
+            inventory["order_will_be_fulfilled_on_time"] = (
+                can_fulfill_by_request_date(inventory, processed["order_date"])
+            )
+            if not inventory["order_will_be_fulfilled_on_time"]:
+                item_results.append(
+                    {
+                        "original_name": item["original_name"],
+                        "item_name": item["item_name"],
+                        "inventory": inventory,
+                        "status": "cannot_deliver_on_time",
+                        "message": (
+                            "The item cannot be delivered by the request date. "
+                            f"Estimated delivery: {inventory['delivery_date']}."
+                        ),
+                        "required_next_action": (
+                            "Ask the customer to provide a later delivery date "
+                            "or remove this item from the request."
+                        ),
+                    }
+                )
+                continue
+
+            pricing = self.tools["get_pricing"](
+                item_name=item["item_name"],
+                quantity=item["quantity"],
+                order_date=processed["order_date"],
+                job=processed["job"],
+                event=processed["event"],
+            )
+
+            result = {
+                "original_name": item["original_name"],
+                "item_name": item["item_name"],
+                "inventory": inventory,
+                "quote": pricing,
+            }
+            result["fulfillment"] = self.tools["finalize_order"](
+                item_name=item["item_name"],
+                quantity=item["quantity"],
+                order_date=processed["order_date"],
+                total_price=pricing["total_price"],
+            )
+            result["status"] = "fulfilled"
+            item_results.append(result)
+
+        return {
+            "order_date": processed["order_date"],
+            "job": processed["job"],
+            "event": processed["event"],
+            "needs_clarification": processed["needs_clarification"],
+            "items": item_results,
+        }
 
 
 # Run your test scenarios by writing them here. Make sure to keep track of them.
