@@ -43,32 +43,34 @@ safety-stock level.
 
 ## 2. Evaluation Results
 
-The evaluated [test_results.csv](test_results.csv) contains 20 customer requests
-and 60 extracted line items.
+The regenerated [test_results.csv](test_results.csv) contains 20 customer
+requests and 60 extracted line items.
 
 ### Request outcomes
 
-- 1 request was completely fulfilled.
-- 7 requests were partially fulfilled.
-- 12 requests had no fulfilled items.
+- 6 requests were completely fulfilled.
+- 11 requests were partially fulfilled.
+- 3 requests had no fulfilled items.
 - 12 of 20 requests contained at least one item requiring clarification.
 
 ### Item outcomes
 
 | Status | Items | Share |
 |---|---:|---:|
-| Fulfilled | 10 | 16.7% |
-| Cannot deliver on time | 37 | 61.7% |
-| Needs clarification | 13 | 21.7% |
+| Fulfilled | 34 | 56.7% |
+| Cannot deliver on time | 12 | 20.0% |
+| Needs clarification | 14 | 23.3% |
 
-The fulfilled items generated 10 sales transactions and 7 supplier stock
+The fulfilled items generated 34 sales transactions and 51 supplier stock
 transactions.
 
 At the request dates shown in the first and final recorded rows:
 
-- Cash changed from `$45,092.20` to `$45,573.60`, an increase of `$481.40`.
-- Inventory value changed from `$4,905.30` to `$4,436.40`, a decrease of
-  `$468.90`.
+- Cash changed from `$45,117.20` to `$45,380.90`, an increase of `$263.70`.
+- Inventory value changed from `$4,875.30` to `$4,327.20`, a decrease of
+  `$548.10`.
+- Every response passed the built-in evaluation assertions with no parsing or
+  arithmetic failures.
 
 ## 3. Strengths
 
@@ -89,51 +91,39 @@ At the request dates shown in the first and final recorded rows:
 
 ## 4. Areas for Improvement
 
-### Delivery-date interpretation in the evaluated run
+### Remaining delivery-date limitations
 
-The evaluated `test_results.csv` was generated before the request date and
-delivery deadline were separated. The scenario file contains:
+The regenerated run now separates:
 
 - `request_date`, such as April 1
 - A requested delivery deadline inside the customer text, often April 15
 
-That run used `request_date` as both the inventory snapshot date and the
-fulfillment deadline. This is the main reason 37 of 60 historical items were
-reported as too late. The current code now distinguishes:
+The 12 late items therefore represent genuine supplier lead-time limitations
+relative to the requested deadline, rather than a comparison against the
+request date.
+
+### Pricing quality
+
+All 34 fulfilled items used a valid numeric discount and passed subtotal and
+total arithmetic assertions. The used rates were:
 
 ```text
-request_date
-requested_delivery_date
-supplier_delivery_date
+0, 0.05, 0.1, 0.2
 ```
 
-### Pricing consistency in the evaluated run
-
-Ten historical items were priced, but four totals did not agree with the
-stated discount
-and catalog subtotal. Discount output also mixed representations such as:
-
-```text
-0.1
-10%
-10
-"10% bulk discount applied"
-```
-
-The current implementation now requires a numeric discount rate from the Quote
-Agent and calculates unit totals in deterministic Python.
+The arithmetic is deterministic, but the discount decision remains
+LLM-dependent. A formal discount policy would make comparable orders more
+consistent.
 
 ### Request extraction quality
 
-Eight of 20 historical results contained `job: "unknown"`, while several
-others stored phrases such as “place an order” rather than a customer role.
-The current runner now passes CSV `job` and `event` values as trusted process
-inputs and uses the LLM only for products and delivery-deadline extraction.
+The regenerated results preserve every CSV job and event value. There are no
+`unknown` jobs caused by LLM extraction.
 
 ### Result serialization
 
-`test_results.csv` currently stores Python dictionary text. JSON serialization
-would make the evaluation output easier to parse and reuse:
+`test_results.csv` now stores valid JSON in the response column, including its
+evaluation metrics.
 
 ```python
 "response": json.dumps(response)
@@ -141,10 +131,7 @@ would make the evaluation output easier to parse and reuse:
 
 ## 5. Recommended Improvements
 
-1. **Regenerate the evaluation.** Run the updated workflow to measure the effect
-   of delivery-date separation, deterministic pricing, and trusted metadata.
-
-2. **Expand deterministic quote rules.** Define explicit quantity tiers for the
+1. **Expand deterministic quote rules.** Define explicit quantity tiers for the
    discount decision while retaining the Quote Agent for recommendation and
    rationale:
 
@@ -154,16 +141,16 @@ would make the evaluation output easier to parse and reuse:
 
    This guarantees that the quoted total always matches the stated discount.
 
-3. **Add delivery-deadline metrics.** Track whether each item can meet the
+2. **Add delivery-deadline metrics.** Track whether each item can meet the
    requested deadline and how many fulfillment days remain.
 
-4. **Expand evaluation assertions.** The current runner serializes responses as
+3. **Expand evaluation assertions.** The current runner serializes responses as
    JSON and validates exact product mappings, item statuses, numeric discount
    rates, expected arithmetic, transaction types, dates, and unique transaction
    IDs. Future work can add expected mapping and outcome fixtures for every CSV
    request.
 
-5. **Add an approval stage for purchases.** Inventory and quotes can be
+4. **Add an approval stage for purchases.** Inventory and quotes can be
    generated automatically, but final purchase and sale transactions should be
    tied to explicit quote acceptance.
 
