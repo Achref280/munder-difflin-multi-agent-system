@@ -162,9 +162,7 @@ class WorkflowTests(unittest.TestCase):
                 "generate_financial_report",
             },
             project.OrderAgent: {
-                "reorder_item",
-                "create_transaction",
-                "get_min_stock_level",
+                "execute_order",
             },
         }
         for agent_type, expected in expected_tools.items():
@@ -307,6 +305,7 @@ class WorkflowTests(unittest.TestCase):
                     "requested_quantity": 10,
                     "transaction_type": "sales",
                     "status": "fulfilled",
+                    "transactions": [],
                 },
             ) as finalize_order,
         ):
@@ -405,6 +404,7 @@ class WorkflowTests(unittest.TestCase):
                     "requested_quantity": 10,
                     "transaction_type": "sales",
                     "status": "fulfilled",
+                    "transaction_date": "2025-01-01",
                 },
                 ("A4 paper", "10"),
             ),
@@ -560,8 +560,36 @@ class WorkflowTests(unittest.TestCase):
             result = project.reorder_item(
                 "A4 paper", 20, "2025-01-01", "2025-01-01"
             )
+        self.assertEqual(result["shortage_quantity"], 15)
+        self.assertEqual(result["shortage_delivery_date"], "2025-01-02")
+        self.assertEqual(result["safety_stock_quantity"], 2)
+        self.assertEqual(result["safety_stock_delivery_date"], "2025-01-01")
         self.assertEqual(result["reordered_quantity"], 17)
-        self.assertEqual(result["delivery_date"], "2025-01-02")
+
+    def test_execute_order_creates_separate_dated_transactions(self):
+        stock = {
+            "exists": True,
+            "current_stock": 5,
+            "shortage": 15,
+        }
+        with patch.object(project, "get_stock_inventory", return_value=stock):
+            transactions = project.execute_order(
+                "A4 paper", 20, "2025-01-01", 1.0
+            )
+
+        self.assertEqual(len(transactions), 3)
+        self.assertEqual(
+            [transaction["transaction_type"] for transaction in transactions],
+            ["stock_orders", "stock_orders", "sales"],
+        )
+        self.assertEqual(
+            [transaction["requested_quantity"] for transaction in transactions],
+            [15, 2, 20],
+        )
+        self.assertEqual(
+            [transaction["transaction_date"] for transaction in transactions],
+            ["2025-01-02", "2025-01-01", "2025-01-02"],
+        )
 
     def test_supplier_delivery_lead_time_boundaries(self):
         cases = {
@@ -873,13 +901,16 @@ class LLMIntegrationTests(unittest.TestCase):
             "requested_quantity",
             "transaction_type",
             "status",
+            "transactions",
         }
         self.assertIsInstance(response, dict)
         self.assertEqual(set(response), expected_fields)
         self.assertEqual(response["item_name"], "A4 paper")
         self.assertEqual(response["requested_quantity"], 3)
-        self.assertEqual(response["transaction_type"], "sales")
+        self.assertIn(response["transaction_type"], {"sales", "multiple"})
         self.assertTrue(response["status"])
+        for transaction in response.get("transactions", []):
+            self.assertIn("transaction_date", transaction)
 
 if __name__ == "__main__":
     unittest.main()

@@ -511,15 +511,12 @@ def get_supplier_delivery_date(input_date_str: str, quantity: int) -> str:
         f"FUNC (get_supplier_delivery_date): Calculating for qty {quantity} from date string '{input_date_str}'"
     )"""
 
-    # Attempt to parse the input date
     try:
         input_date_dt = datetime.fromisoformat(input_date_str.split("T")[0])
     except (ValueError, TypeError):
-        # Fallback to current date on format error
-        print(
-            f"WARN (get_supplier_delivery_date): Invalid date format '{input_date_str}', using today as base."
+        raise ValueError(
+            f"Invalid request date '{input_date_str}'; expected YYYY-MM-DD."
         )
-        input_date_dt = datetime.now()
 
     # Determine delivery delay based on quantity
     if quantity <= 10:
@@ -810,7 +807,7 @@ def get_stock_inventory(
 def reorder_item(
     item_name: str, quantity: int, as_of_date: str, order_date: str
 ) -> dict[str, Any]:
-    """Plan a supplier reorder after fulfilling the requested quantity.
+    """Plan separate shortage and safety-stock supplier purchases.
 
     Args:
         item_name (str): The name of the item to reorder.
@@ -819,31 +816,127 @@ def reorder_item(
         order_date (str): The order date in YYYY-MM-DD format.
 
     Returns:
-        dict[str, Any]: Reorder quantity and estimated supplier delivery date.
+        dict[str, Any]: Separate quantities and delivery dates for each purchase.
     """
     if quantity <= 0:
         raise ValueError("Quantity must be greater than zero.")
     stock = get_stock_inventory(as_of_date, item_name, quantity, order_date=order_date)
     if not stock["exists"]:
         raise ValueError(f"Unknown item: {item_name}")
-    reordered_quantity = max(0, stock["shortage"] + get_min_stock_level(item_name))
+    shortage_quantity = int(stock["shortage"])
+    minimum_stock = get_min_stock_level(item_name)
+    remaining_after_sale = max(
+        0, int(stock["current_stock"]) + shortage_quantity - quantity
+    )
+    safety_stock_quantity = max(0, minimum_stock - remaining_after_sale)
     return {
         "item_name": item_name,
-        "reordered_quantity": reordered_quantity,
-        "delivery_date": (
-            get_supplier_delivery_date(as_of_date, reordered_quantity)
-            if reordered_quantity
+        "shortage_quantity": shortage_quantity,
+        "shortage_delivery_date": (
+            get_supplier_delivery_date(as_of_date, shortage_quantity)
+            if shortage_quantity
             else None
         ),
+        "safety_stock_quantity": safety_stock_quantity,
+        "safety_stock_delivery_date": (
+            get_supplier_delivery_date(as_of_date, safety_stock_quantity)
+            if safety_stock_quantity
+            else None
+        ),
+        "reordered_quantity": shortage_quantity + safety_stock_quantity,
     }
 
 
+@tool
+def execute_order(
+    item_name: str,
+    quantity: int,
+    order_date: str,
+    total_price: float,
+) -> list[dict[str, Any]]:
+    """Atomically execute shortage, safety-stock, and sales transactions.
+
+    Args:
+        item_name: Exact catalog item name.
+        quantity: Requested customer quantity.
+        order_date: Order date in YYYY-MM-DD format.
+        total_price: Total customer sales price.
+
+    Returns:
+        A list of the transactions committed for this order.
+    """
+    if quantity <= 0:
+        raise ValueError("Quantity must be greater than zero.")
+    catalog_item = next(
+        (item for item in paper_supplies if item["item_name"] == item_name), None
+    )
+    if catalog_item is None:
+        raise ValueError(f"Unknown item: {item_name}")
+
+    plan = reorder_item(item_name, quantity, order_date, order_date)
+    transactions = []
+    with db_engine.begin() as conn:
+        for transaction_type, units, date in (
+            (
+                "stock_orders",
+                plan["shortage_quantity"],
+                plan["shortage_delivery_date"],
+            ),
+            (
+                "stock_orders",
+                plan["safety_stock_quantity"],
+                plan["safety_stock_delivery_date"],
+            ),
+            (
+                "sales",
+                quantity,
+                plan["shortage_delivery_date"] or order_date,
+            ),
+        ):
+            if not units:
+                continue
+            price = (
+                float(total_price)
+                if transaction_type == "sales"
+                else float(units) * float(catalog_item["unit_price"])
+            )
+            result = conn.execute(
+                text("""
+                    INSERT INTO transactions (
+                        item_name, transaction_type, units, price, transaction_date
+                    )
+                    VALUES (
+                        :item_name, :transaction_type, :units, :price,
+                        :transaction_date
+                    )
+                """),
+                {
+                    "item_name": item_name,
+                    "transaction_type": transaction_type,
+                    "units": units,
+                    "price": price,
+                    "transaction_date": date,
+                },
+            )
+            transactions.append(
+                {
+                    "transaction_id": int(result.lastrowid),
+                    "item_name": item_name,
+                    "requested_quantity": int(units),
+                    "transaction_type": transaction_type,
+                    "status": "completed",
+                    "transaction_date": date,
+                }
+            )
+    return transactions
+
+
 # Set up your agents and create an orchestration agent that will manage them
-def parse_agent_response(response: Any) -> dict[str, Any]:
-    """Normalize an agent response into a structured dictionary."""
+def parse_agent_value(response: Any) -> Any:
+    """Normalize an agent response into a Python JSON-compatible value."""
     if isinstance(response, str):
         try:
-            data = json.loads(response)
+            return json.loads(response)
         except json.JSONDecodeError as json_error:
             python_literal = (
                 response.replace("null", "None")
@@ -851,11 +944,15 @@ def parse_agent_response(response: Any) -> dict[str, Any]:
                 .replace("false", "False")
             )
             try:
-                data = ast.literal_eval(python_literal)
+                return ast.literal_eval(python_literal)
             except (SyntaxError, ValueError):
                 raise json_error
-    else:
-        data = response
+    return response
+
+
+def parse_agent_response(response: Any) -> dict[str, Any]:
+    """Normalize an agent response into a structured dictionary."""
+    data = parse_agent_value(response)
     if not isinstance(data, dict):
         raise TypeError("Invalid response format")
     return data
@@ -1012,9 +1109,7 @@ class OrderAgent(ToolCallingAgent):
     def __init__(self, model):
         super().__init__(
             tools=[
-                reorder_item,
-                create_transaction,
-                get_min_stock_level,
+                execute_order,
             ],
             model=model,
             name="order_agent",
@@ -1216,27 +1311,53 @@ class OrchestrationAgent(ToolCallingAgent):
             }
             response = self.order_agent.run(f"""
                 The customer wants: "{request_information}"
-                First check the current stock level using the get_stock_inventory tool.
-                then check if the current stock is sufficient to fulfill the order.
-                if it is sufficient, proceed to fulfill the order using the create_transaction for recording the order transaction.
-                if it is not sufficient get the delivery details from get_stock_inventory and use create_transaction to buy the shortfall quantity.
-                after buying the shortfall quantity proceed to fulfill the order using the create_transaction for recording the order transaction.
-                After fulfilling the order, check if reordering is needed and determine the safety stock requirement using the reorder_item tool.
-                if reordering is needed, use the create_transaction tool buy the required safety stock.
-                When reordering or buying the stock use the appropriate 'stock_orders' transaction_type.
-                when recording the sell order transaction use the appropriate 'sales' transaction_type.
-                Return only valid JSON with item_name, requested_quantity, transaction_type, and status per transaction made, so that the response captures all actions taken.
-                Use double quotes around all keys and string values.
+                Call execute_order exactly once with these exact arguments.
+                This tool atomically records any shortage purchase, safety-stock
+                purchase, and the customer sale.
+                Return exactly the transaction array produced by execute_order.
+                Do not call any other transaction tool or repeat the call.
                 """)
-            data = parse_agent_response(response)
-            if (
-                "item_name" not in data
-                or "requested_quantity" not in data
-                or "transaction_type" not in data
-                or "status" not in data
-            ):
-                raise ValueError("Missing required fields in response")
-            return data
+            data = parse_agent_value(response)
+            if isinstance(data, dict):
+                transactions = [data]
+                original_shape_is_dict = True
+            else:
+                transactions = data
+                original_shape_is_dict = False
+            if not isinstance(transactions, list) or not transactions:
+                raise TypeError("Invalid fulfillment response format")
+
+            required_fields = {
+                "item_name",
+                "requested_quantity",
+                "transaction_type",
+                "status",
+                "transaction_date",
+            }
+            for transaction in transactions:
+                if not isinstance(transaction, dict):
+                    raise TypeError("Each fulfillment transaction must be an object")
+                if required_fields - transaction.keys():
+                    raise ValueError("Missing required fulfillment fields")
+
+            if original_shape_is_dict:
+                return data
+
+            return {
+                "item_name": item_name,
+                "requested_quantity": quantity,
+                "transaction_type": (
+                    transactions[0]["transaction_type"]
+                    if len(transactions) == 1
+                    else "multiple"
+                ),
+                "status": (
+                    "fulfilled"
+                    if all(transaction["status"] for transaction in transactions)
+                    else "failed"
+                ),
+                "transactions": transactions,
+            }
 
         super().__init__(
             tools=[
