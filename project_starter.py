@@ -936,8 +936,69 @@ def parse_agent_value(response: Any) -> Any:
     """Normalize an agent response into a Python JSON-compatible value."""
     if isinstance(response, str):
         try:
-            return json.loads(response)
+            parsed = json.loads(response)
+            if isinstance(parsed, str):
+                return parse_agent_value(parsed)
+            return parsed
         except json.JSONDecodeError as json_error:
+            if response.lstrip().startswith("{") and '\\"' in response:
+                try:
+                    unescaped = json.loads(f'"{response}"')
+                    if isinstance(unescaped, str) and unescaped != response:
+                        return parse_agent_value(unescaped)
+                except json.JSONDecodeError:
+                    pass
+
+            repaired = []
+            inside_string = False
+            escaped = False
+            for index, character in enumerate(response):
+                if character == "\\" and inside_string and not escaped:
+                    escaped = True
+                    repaired.append(character)
+                    continue
+                if character == '"':
+                    if not inside_string:
+                        inside_string = True
+                        repaired.append(character)
+                    elif escaped:
+                        repaired.append(character)
+                    else:
+                        remaining = response[index + 1:].lstrip()
+                        if remaining.startswith((",", "}", "]", ":")):
+                            inside_string = False
+                            repaired.append(character)
+                        else:
+                            repaired.append('\\"')
+                    escaped = False
+                    continue
+                repaired.append(character)
+                escaped = False
+            repaired_response = "".join(repaired)
+            if repaired_response != response:
+                try:
+                    return json.loads(repaired_response)
+                except json.JSONDecodeError:
+                    pass
+
+            try:
+                decoder = json.JSONDecoder()
+                candidates = (response.lstrip(), repaired_response.lstrip())
+                parsed = None
+                for candidate in candidates:
+                    try:
+                        data, end = decoder.raw_decode(candidate)
+                        trailing = candidate[end:].strip()
+                    except json.JSONDecodeError:
+                        continue
+                    if not trailing or set(trailing) <= {"}"}:
+                        parsed = data
+                        break
+                if parsed is not None:
+                    return parsed
+            except json.JSONDecodeError:
+                pass
+
             python_literal = (
                 response.replace("null", "None")
                 .replace("true", "True")
@@ -1147,6 +1208,8 @@ class OrchestrationAgent(ToolCallingAgent):
                 Rules:
                 - Never invent an item_name.
                 - Preserve the customer's wording in original_name.
+                - Return valid JSON. Escape every quote character inside a string,
+                  for example write 24\\" x 36\\" rather than 24" x 36".
                 - Keep requested size, color, finish, weight, and other details in
                   requested_attributes.
                 - Do not invent attributes that the customer did not state.
@@ -1272,7 +1335,13 @@ class OrchestrationAgent(ToolCallingAgent):
                 Get the pricing for the requested items.
                 When searching quote history, include only quotes on or before
                 the request's order_date.
-                Return only valid JSON with item_name, requested_quantity, discount, and total_price.
+                Explain the exact pricing logic in pricing_explanation, including:
+                - catalog unit price and base subtotal
+                - selected bulk discount rate and why
+                - relevant quote history and financial context considered
+                - calculation from base subtotal to final total_price
+                Return only valid JSON with item_name, requested_quantity, discount,
+                total_price, and pricing_explanation.
                 Use double quotes around all keys and string values.
                 """)
             data = parse_agent_response(response)
@@ -1281,8 +1350,14 @@ class OrchestrationAgent(ToolCallingAgent):
                 or "requested_quantity" not in data
                 or "discount" not in data
                 or "total_price" not in data
+                or "pricing_explanation" not in data
             ):
                 raise ValueError("Missing required fields in response")
+            if (
+                not isinstance(data["pricing_explanation"], str)
+                or not data["pricing_explanation"].strip()
+            ):
+                raise ValueError("Pricing explanation must be a non-empty string")
             return data
 
         @tool
@@ -1428,6 +1503,7 @@ class OrchestrationAgent(ToolCallingAgent):
                 "item_name": item["item_name"],
                 "inventory": inventory,
                 "quote": pricing,
+                "pricing_explanation": pricing["pricing_explanation"],
             }
             result["fulfillment"] = self.tools["finalize_order"](
                 item_name=item["item_name"],

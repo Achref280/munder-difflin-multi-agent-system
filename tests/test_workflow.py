@@ -225,6 +225,7 @@ class WorkflowTests(unittest.TestCase):
             "requested_quantity": 10,
             "discount": 0,
             "total_price": 0.5,
+            "pricing_explanation": "Base price 0.50 with no discount.",
         }
 
         with (
@@ -285,6 +286,7 @@ class WorkflowTests(unittest.TestCase):
             "requested_quantity": 10,
             "discount": 0,
             "total_price": 0.5,
+            "pricing_explanation": "Base price 0.50 with no discount.",
         }
 
         with (
@@ -392,6 +394,7 @@ class WorkflowTests(unittest.TestCase):
                     "requested_quantity": 10,
                     "discount": 0.1,
                     "total_price": 0.45,
+                    "pricing_explanation": "Bulk discount applied to the 0.50 subtotal.",
                 },
                 ("A4 paper", "10"),
             ),
@@ -512,6 +515,77 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(blocked_item["item_name"], None)
         self.assertIn("Package size is missing", blocked_item["clarification_message"])
         self.assertTrue(result["needs_clarification"])
+
+    def test_parse_agent_value_accepts_one_extra_closing_brace(self):
+        response = (
+            '{"items": [], "order_date": "2025-04-04", '
+            '"job": "manager", "event": "conference"}}'
+        )
+        self.assertEqual(
+            project.parse_agent_value(response),
+            {
+                "items": [],
+                "order_date": "2025-04-04",
+                "job": "manager",
+                "event": "conference",
+            },
+        )
+
+    def test_parse_agent_value_rejects_non_brace_trailing_data(self):
+        with self.assertRaises(json.JSONDecodeError):
+            project.parse_agent_value(
+                '{"order_date": "2025-04-04"} unexpected text'
+            )
+
+    def test_parse_agent_value_repairs_unescaped_dimension_quotes(self):
+        response = (
+            '{"original_name":"300 poster boards (24" x 36")",'
+            '"item_name":"Large poster paper (24x36 inches)"}'
+        )
+        self.assertEqual(
+            project.parse_agent_value(response),
+            {
+                "original_name": '300 poster boards (24" x 36")',
+                "item_name": "Large poster paper (24x36 inches)",
+            },
+        )
+
+    def test_parse_agent_value_repairs_quotes_and_extra_closing_brace(self):
+        response = (
+            '{"original_name":"300 poster boards (24" x 36")",'
+            '"items":[]}}'
+        )
+        self.assertEqual(
+            project.parse_agent_value(response),
+            {
+                "original_name": '300 poster boards (24" x 36")',
+                "items": [],
+            },
+        )
+
+    def test_parse_agent_value_unwraps_escaped_json_object(self):
+        response = (
+            '{\\n  \\"items\\": [],\\n  \\"order_date\\": \\"2025-04-04\\",\\n'
+            '  \\"job\\": \\"unknown\\",\\n  \\"event\\": \\"conference\\"\\n}'
+        )
+        self.assertEqual(
+            project.parse_agent_value(response),
+            {
+                "items": [],
+                "order_date": "2025-04-04",
+                "job": "unknown",
+                "event": "conference",
+            },
+        )
+
+    def test_parse_agent_value_unwraps_double_encoded_json_object(self):
+        response = json.dumps(
+            '{"items":[],"order_date":"2025-04-04"}'
+        )
+        self.assertEqual(
+            project.parse_agent_value(response),
+            {"items": [], "order_date": "2025-04-04"},
+        )
 
     def test_validate_extracted_request_rejects_unknown_catalog_mapping(self):
         result = project.validate_extracted_request(
@@ -879,6 +953,7 @@ class LLMIntegrationTests(unittest.TestCase):
             "requested_quantity",
             "discount",
             "total_price",
+            "pricing_explanation",
         }
         self.assertIsInstance(response, dict)
         self.assertEqual(set(response), expected_fields)
@@ -887,6 +962,8 @@ class LLMIntegrationTests(unittest.TestCase):
         self.assertGreaterEqual(response["discount"], 0)
         self.assertLessEqual(response["discount"], 1)
         self.assertGreater(response["total_price"], 0)
+        self.assertIsInstance(response["pricing_explanation"], str)
+        self.assertTrue(response["pricing_explanation"].strip())
 
     def test_finalize_order_returns_requested_format(self):
         response = self.agent.tools["finalize_order"](
