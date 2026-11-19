@@ -1,0 +1,1511 @@
+[
+  {
+    "request_id": 1,
+    "request_date": "2025-04-01",
+    "status_summary": [
+      {
+        "item_name": "Glossy paper",
+        "status": "fulfilled",
+        "reason_code": "ORDER_FULFILLED",
+        "quantity": 200,
+        "total_price": 36.0,
+        "delivery_date": "2025-04-01"
+      },
+      {
+        "item_name": "Cardstock",
+        "status": "fulfilled",
+        "reason_code": "ORDER_FULFILLED",
+        "quantity": 100,
+        "total_price": 13.5,
+        "delivery_date": "2025-04-01"
+      },
+      {
+        "item_name": "Colored paper",
+        "status": "fulfilled",
+        "reason_code": "ORDER_FULFILLED",
+        "quantity": 100,
+        "total_price": 8.0,
+        "delivery_date": "2025-04-01"
+      }
+    ],
+    "evaluation": {
+      "passed": true,
+      "item_count": 3,
+      "items": [
+        {
+          "original_name": "200 sheets of A4 glossy paper",
+          "item_name": "Glossy paper",
+          "status": "fulfilled",
+          "discount_rate": 0.1,
+          "expected_arithmetic": {
+            "unit_price": 0.2,
+            "quantity": 200,
+            "expected_subtotal": 40.0,
+            "expected_total": 36.0
+          },
+          "transaction_ids": [
+            20
+          ]
+        },
+        {
+          "original_name": "100 sheets of heavy cardstock (white)",
+          "item_name": "Cardstock",
+          "status": "fulfilled",
+          "discount_rate": 0.1,
+          "expected_arithmetic": {
+            "unit_price": 0.15,
+            "quantity": 100,
+            "expected_subtotal": 15.0,
+            "expected_total": 13.5
+          },
+          "transaction_ids": [
+            21
+          ]
+        },
+        {
+          "original_name": "100 sheets of colored paper (assorted colors)",
+          "item_name": "Colored paper",
+          "status": "fulfilled",
+          "discount_rate": 0.2,
+          "expected_arithmetic": {
+            "unit_price": 0.1,
+            "quantity": 100,
+            "expected_subtotal": 10.0,
+            "expected_total": 8.0
+          },
+          "transaction_ids": [
+            22
+          ]
+        }
+      ],
+      "transaction_count": 3
+    }
+  },
+  {
+    "request_id": 2,
+    "request_date": "2025-04-03",
+    "status_summary": [
+      {
+        "item_name": "Poster paper",
+        "status": "fulfilled",
+        "reason_code": "ORDER_FULFILLED",
+        "quantity": 500,
+        "total_price": 125.0,
+        "delivery_date": "2025-04-06"
+      },
+      {
+        "item_name": "Party streamers",
+        "status": "fulfilled",
+        "reason_code": "ORDER_FULFILLED",
+        "quantity": 300,
+        "total_price": 12.0,
+        "delivery_date": "2025-04-06"
+      },
+      {
+        "item_name": null,
+        "status": "needs_clarification",
+        "reason_code": "PRODUCT_CLARIFICATION_REQUIRED",
+        "quantity": null,
+        "total_price": null,
+        "delivery_date": "2025-04-15"
+      }
+    ],
+    "evaluation": {
+      "passed": true,
+      "item_count": 3,
+      "items": [
+        {
+          "original_name": "500 sheets of colorful poster paper",
+          "item_name": "Poster paper",
+          "status": "fulfilled",
+          "discount_rate": 0,
+          "expected_arithmetic": {
+            "unit_price": 0.25,
+            "quantity": 500,
+            "expected_subtotal": 125.0,
+            "expected_total": 125.0
+          },
+          "transaction_ids": [
+            23,
+            24,
+            25
+          ]
+        },
+        {
+          "original_name": "300 roll of streamers",
+          "item_name": "Party streamers",
+          "status": "fulfilled",
+          "discount_rate": 0.2,
+          "expected_arithmetic": {
+            "unit_price": 0.05,
+            "quantity": 300,
+            "expected_subtotal": 15.0,
+            "expected_total": 12.0
+          },
+          "transaction_ids": [
+            26,
+            27,
+            28
+          ]
+        },
+        {
+          "original_name": "200 balloons",
+          "item_name": null,
+          "status": "needs_clarification",
+          "discount_rate": null,
+          "expected_arithmetic": null,
+          "transaction_ids": []
+        }
+      ],
+      "transaction_count": 6
+    }
+  },
+  {
+    "request_id": 3,
+    "request_date": "2025-04-04",
+    "status_summary": [
+      {
+        "item_name": "A4 paper",
+        "status": "fulfilled",
+        "reason_code": "ORDER_FULFILLED",
+        "quantity": 10000,
+        "total_price": 450.0,
+        "delivery_date": "2025-04-11"
+      },
+      {
+        "item_name": null,
+        "status": "needs_clarification",
+        "reason_code": "PRODUCT_CLARIFICATION_REQUIRED",
+        "quantity": null,
+        "total_price": null,
+        "delivery_date": "2025-04-15"
+      },
+      {
+        "item_name": null,
+        "status": "needs_clarification",
+        "reason_code": "QTY_CLARIFICATION_REQUIRED",
+        "quantity": null,
+        "total_price": null,
+        "delivery_date": "2025-04-15"
+      }
+    ],
+    "evaluation": {
+      "passed": true,
+      "item_count": 3,
+      "items": [
+        {
+          "original_name": "10,000 sheets of A4 paper",
+          "item_name": "A4 paper",
+          "status": "fulfilled",
+          "discount_rate": 0.1,
+          "expected_arithmetic": {
+            "unit_price": 0.05,
+            "quantity": 10000,
+            "expected_subtotal": 500.0,
+            "expected_total": 450.0
+          },
+          "transaction_ids": [
+            29,
+            30,
+            31
+          ]
+        },
+        {
+          "original_name": "5,000 sheets of A3 paper",
+          "item_name": null,
+          "status": "needs_clarification",
+          "discount_rate": null,
+          "expected_arithmetic": null,
+          "transaction_ids": []
+        },
+        {
+          "original_name": "500 reams of printer paper",
+          "item_name": null,
+          "status": "needs_clarification",
+          "discount_rate": null,
+          "expected_arithmetic": null,
+          "transaction_ids": []
+        }
+      ],
+      "transaction_count": 3
+    }
+  },
+  {
+    "request_id": 4,
+    "request_date": "2025-04-05",
+    "status_summary": [
+      {
+        "item_name": "Cardstock",
+        "status": "fulfilled",
+        "reason_code": "ORDER_FULFILLED",
+        "quantity": 500,
+        "total_price": 67.5,
+        "delivery_date": "2025-04-10"
+      },
+      {
+        "item_name": "A4 paper",
+        "status": "fulfilled",
+        "reason_code": "ORDER_FULFILLED",
+        "quantity": 250,
+        "total_price": 11.25,
+        "delivery_date": "2025-04-05"
+      }
+    ],
+    "evaluation": {
+      "passed": true,
+      "item_count": 2,
+      "items": [
+        {
+          "original_name": "500 sheets of high-quality, recycled cardstock in various colors",
+          "item_name": "Cardstock",
+          "status": "fulfilled",
+          "discount_rate": 0.1,
+          "expected_arithmetic": {
+            "unit_price": 0.15,
+            "quantity": 500,
+            "expected_subtotal": 75.0,
+            "expected_total": 67.5
+          },
+          "transaction_ids": [
+            32,
+            33,
+            34
+          ]
+        },
+        {
+          "original_name": "250 sheets of A4 size printer paper",
+          "item_name": "A4 paper",
+          "status": "fulfilled",
+          "discount_rate": 0.1,
+          "expected_arithmetic": {
+            "unit_price": 0.05,
+            "quantity": 250,
+            "expected_subtotal": 12.5,
+            "expected_total": 11.25
+          },
+          "transaction_ids": [
+            35,
+            36
+          ]
+        }
+      ],
+      "transaction_count": 5
+    }
+  },
+  {
+    "request_id": 5,
+    "request_date": "2025-04-05",
+    "status_summary": [
+      {
+        "item_name": "Colored paper",
+        "status": "fulfilled",
+        "reason_code": "ORDER_FULFILLED",
+        "quantity": 500,
+        "total_price": 45.0,
+        "delivery_date": "2025-04-05"
+      },
+      {
+        "item_name": "Cardstock",
+        "status": "fulfilled",
+        "reason_code": "ORDER_FULFILLED",
+        "quantity": 300,
+        "total_price": 40.5,
+        "delivery_date": "2025-04-09"
+      },
+      {
+        "item_name": "Decorative adhesive tape (washi tape)",
+        "status": "fulfilled",
+        "reason_code": "ORDER_FULFILLED",
+        "quantity": 200,
+        "total_price": 40.0,
+        "delivery_date": "2025-04-08"
+      }
+    ],
+    "evaluation": {
+      "passed": true,
+      "item_count": 3,
+      "items": [
+        {
+          "original_name": "500 sheets of 8.5\"x11\" colored paper",
+          "item_name": "Colored paper",
+          "status": "fulfilled",
+          "discount_rate": 0.1,
+          "expected_arithmetic": {
+            "unit_price": 0.1,
+            "quantity": 500,
+            "expected_subtotal": 50.0,
+            "expected_total": 45.0
+          },
+          "transaction_ids": [
+            37
+          ]
+        },
+        {
+          "original_name": "300 sheets of cardstock in various colors",
+          "item_name": "Cardstock",
+          "status": "fulfilled",
+          "discount_rate": 0.1,
+          "expected_arithmetic": {
+            "unit_price": 0.15,
+            "quantity": 300,
+            "expected_subtotal": 45.0,
+            "expected_total": 40.5
+          },
+          "transaction_ids": [
+            38,
+            39,
+            40
+          ]
+        },
+        {
+          "original_name": "200 rolls of decorative washi tape",
+          "item_name": "Decorative adhesive tape (washi tape)",
+          "status": "fulfilled",
+          "discount_rate": 0.0,
+          "expected_arithmetic": {
+            "unit_price": 0.2,
+            "quantity": 200,
+            "expected_subtotal": 40.0,
+            "expected_total": 40.0
+          },
+          "transaction_ids": [
+            41,
+            42,
+            43
+          ]
+        }
+      ],
+      "transaction_count": 7
+    }
+  },
+  {
+    "request_id": 6,
+    "request_date": "2025-04-06",
+    "status_summary": [
+      {
+        "item_name": "Colored paper",
+        "status": "fulfilled",
+        "reason_code": "ORDER_FULFILLED",
+        "quantity": 500,
+        "total_price": 45.0,
+        "delivery_date": "2025-04-10"
+      },
+      {
+        "item_name": null,
+        "status": "needs_clarification",
+        "reason_code": "PRODUCT_CLARIFICATION_REQUIRED",
+        "quantity": null,
+        "total_price": null,
+        "delivery_date": "2025-04-15"
+      },
+      {
+        "item_name": "Cardstock",
+        "status": "fulfilled",
+        "reason_code": "ORDER_FULFILLED",
+        "quantity": 200,
+        "total_price": 27.0,
+        "delivery_date": "2025-04-10"
+      }
+    ],
+    "evaluation": {
+      "passed": true,
+      "item_count": 3,
+      "items": [
+        {
+          "original_name": "500 sheets of colorful construction paper",
+          "item_name": "Colored paper",
+          "status": "fulfilled",
+          "discount_rate": 0.1,
+          "expected_arithmetic": {
+            "unit_price": 0.1,
+            "quantity": 500,
+            "expected_subtotal": 50.0,
+            "expected_total": 45.0
+          },
+          "transaction_ids": [
+            44,
+            45,
+            46
+          ]
+        },
+        {
+          "original_name": "300 sheets of white printer paper",
+          "item_name": null,
+          "status": "needs_clarification",
+          "discount_rate": null,
+          "expected_arithmetic": null,
+          "transaction_ids": []
+        },
+        {
+          "original_name": "200 sheets of cardstock in various colors",
+          "item_name": "Cardstock",
+          "status": "fulfilled",
+          "discount_rate": 0.1,
+          "expected_arithmetic": {
+            "unit_price": 0.15,
+            "quantity": 200,
+            "expected_subtotal": 30.0,
+            "expected_total": 27.0
+          },
+          "transaction_ids": [
+            47,
+            48,
+            49
+          ]
+        }
+      ],
+      "transaction_count": 6
+    }
+  },
+  {
+    "request_id": 7,
+    "request_date": "2025-04-07",
+    "status_summary": [
+      {
+        "item_name": "A4 paper",
+        "status": "fulfilled",
+        "reason_code": "ORDER_FULFILLED",
+        "quantity": 500,
+        "total_price": 23.75,
+        "delivery_date": "2025-04-11"
+      },
+      {
+        "item_name": null,
+        "status": "needs_clarification",
+        "reason_code": "PRODUCT_CLARIFICATION_REQUIRED",
+        "quantity": null,
+        "total_price": null,
+        "delivery_date": "2025-04-15"
+      },
+      {
+        "item_name": "Large poster paper (24x36 inches)",
+        "status": "fulfilled",
+        "reason_code": "ORDER_FULFILLED",
+        "quantity": 300,
+        "total_price": 270.0,
+        "delivery_date": "2025-04-07"
+      },
+      {
+        "item_name": "Cardstock",
+        "status": "fulfilled",
+        "reason_code": "ORDER_FULFILLED",
+        "quantity": 200,
+        "total_price": 27.0,
+        "delivery_date": "2025-04-11"
+      }
+    ],
+    "evaluation": {
+      "passed": true,
+      "item_count": 4,
+      "items": [
+        {
+          "original_name": "500 sheets of glossy A4 paper",
+          "item_name": "A4 paper",
+          "status": "fulfilled",
+          "discount_rate": 0.05,
+          "expected_arithmetic": {
+            "unit_price": 0.05,
+            "quantity": 500,
+            "expected_subtotal": 25.0,
+            "expected_total": 23.75
+          },
+          "transaction_ids": [
+            50,
+            51,
+            52
+          ]
+        },
+        {
+          "original_name": "1000 sheets of matte A3 paper",
+          "item_name": null,
+          "status": "needs_clarification",
+          "discount_rate": null,
+          "expected_arithmetic": null,
+          "transaction_ids": []
+        },
+        {
+          "original_name": "300 poster boards (24\" x 36\")",
+          "item_name": "Large poster paper (24x36 inches)",
+          "status": "fulfilled",
+          "discount_rate": 0.1,
+          "expected_arithmetic": {
+            "unit_price": 1.0,
+            "quantity": 300,
+            "expected_subtotal": 300.0,
+            "expected_total": 270.0
+          },
+          "transaction_ids": [
+            53
+          ]
+        },
+        {
+          "original_name": "200 sheets of heavyweight cardstock",
+          "item_name": "Cardstock",
+          "status": "fulfilled",
+          "discount_rate": 0.1,
+          "expected_arithmetic": {
+            "unit_price": 0.15,
+            "quantity": 200,
+            "expected_subtotal": 30.0,
+            "expected_total": 27.0
+          },
+          "transaction_ids": [
+            54,
+            55,
+            56
+          ]
+        }
+      ],
+      "transaction_count": 7
+    }
+  },
+  {
+    "request_id": 8,
+    "request_date": "2025-04-07",
+    "status_summary": [
+      {
+        "item_name": "Glossy paper",
+        "status": "fulfilled",
+        "reason_code": "ORDER_FULFILLED",
+        "quantity": 500,
+        "total_price": 80.0,
+        "delivery_date": "2025-04-11"
+      },
+      {
+        "item_name": "Matte paper",
+        "status": "fulfilled",
+        "reason_code": "ORDER_FULFILLED",
+        "quantity": 1000,
+        "total_price": 162.0,
+        "delivery_date": "2025-04-11"
+      },
+      {
+        "item_name": null,
+        "status": "needs_clarification",
+        "reason_code": "QTY_CLARIFICATION_REQUIRED",
+        "quantity": null,
+        "total_price": null,
+        "delivery_date": "2025-04-15"
+      },
+      {
+        "item_name": "Recycled paper",
+        "status": "fulfilled",
+        "reason_code": "ORDER_FULFILLED",
+        "quantity": 3000,
+        "total_price": 216.0,
+        "delivery_date": "2025-04-13"
+      }
+    ],
+    "evaluation": {
+      "passed": true,
+      "item_count": 4,
+      "items": [
+        {
+          "original_name": "500 sheets of A4 glossy paper",
+          "item_name": "Glossy paper",
+          "status": "fulfilled",
+          "discount_rate": 0.2,
+          "expected_arithmetic": {
+            "unit_price": 0.2,
+            "quantity": 500,
+            "expected_subtotal": 100.0,
+            "expected_total": 80.0
+          },
+          "transaction_ids": [
+            57,
+            58,
+            59
+          ]
+        },
+        {
+          "original_name": "1000 sheets of A4 matte paper",
+          "item_name": "Matte paper",
+          "status": "fulfilled",
+          "discount_rate": 0.1,
+          "expected_arithmetic": {
+            "unit_price": 0.18,
+            "quantity": 1000,
+            "expected_subtotal": 180.0,
+            "expected_total": 162.0
+          },
+          "transaction_ids": [
+            60,
+            61,
+            62
+          ]
+        },
+        {
+          "original_name": "2000 sheets of A5 colored paper",
+          "item_name": null,
+          "status": "needs_clarification",
+          "discount_rate": null,
+          "expected_arithmetic": null,
+          "transaction_ids": []
+        },
+        {
+          "original_name": "3000 sheets of A4 recycled paper",
+          "item_name": "Recycled paper",
+          "status": "fulfilled",
+          "discount_rate": 0.1,
+          "expected_arithmetic": {
+            "unit_price": 0.08,
+            "quantity": 3000,
+            "expected_subtotal": 240.0,
+            "expected_total": 216.0
+          },
+          "transaction_ids": [
+            63,
+            64,
+            65
+          ]
+        }
+      ],
+      "transaction_count": 9
+    }
+  },
+  {
+    "request_id": 9,
+    "request_date": "2025-04-07",
+    "status_summary": [
+      {
+        "item_name": "A4 paper",
+        "status": "cannot_deliver_on_time",
+        "reason_code": "DELIVERY_WINDOW_UNAVAILABLE",
+        "quantity": 200,
+        "total_price": null,
+        "delivery_date": "2025-04-11"
+      },
+      {
+        "item_name": "Glossy paper",
+        "status": "fulfilled",
+        "reason_code": "ORDER_FULFILLED",
+        "quantity": 100,
+        "total_price": 18.0,
+        "delivery_date": "2025-04-07"
+      },
+      {
+        "item_name": null,
+        "status": "needs_clarification",
+        "reason_code": "QTY_CLARIFICATION_REQUIRED",
+        "quantity": null,
+        "total_price": null,
+        "delivery_date": "2025-04-10"
+      }
+    ],
+    "evaluation": {
+      "passed": true,
+      "item_count": 3,
+      "items": [
+        {
+          "original_name": "200 sheets of A4 white printer paper",
+          "item_name": "A4 paper",
+          "status": "cannot_deliver_on_time",
+          "discount_rate": null,
+          "expected_arithmetic": null,
+          "transaction_ids": []
+        },
+        {
+          "original_name": "100 sheets of A3 glossy paper",
+          "item_name": "Glossy paper",
+          "status": "fulfilled",
+          "discount_rate": 0.1,
+          "expected_arithmetic": {
+            "unit_price": 0.2,
+            "quantity": 100,
+            "expected_subtotal": 20.0,
+            "expected_total": 18.0
+          },
+          "transaction_ids": [
+            66
+          ]
+        },
+        {
+          "original_name": "50 packets of 100% recycled kraft paper envelopes",
+          "item_name": null,
+          "status": "needs_clarification",
+          "discount_rate": null,
+          "expected_arithmetic": null,
+          "transaction_ids": []
+        }
+      ],
+      "transaction_count": 1
+    }
+  },
+  {
+    "request_id": 13,
+    "request_date": "2025-04-08",
+    "status_summary": [
+      {
+        "item_name": "A4 paper",
+        "status": "cannot_deliver_on_time",
+        "reason_code": "DELIVERY_WINDOW_UNAVAILABLE",
+        "quantity": 500,
+        "total_price": null,
+        "delivery_date": "2025-04-12"
+      },
+      {
+        "item_name": "Cardstock",
+        "status": "cannot_deliver_on_time",
+        "reason_code": "DELIVERY_WINDOW_UNAVAILABLE",
+        "quantity": 200,
+        "total_price": null,
+        "delivery_date": "2025-04-12"
+      }
+    ],
+    "evaluation": {
+      "passed": true,
+      "item_count": 2,
+      "items": [
+        {
+          "original_name": "500 sheets of A4 printing paper",
+          "item_name": "A4 paper",
+          "status": "cannot_deliver_on_time",
+          "discount_rate": null,
+          "expected_arithmetic": null,
+          "transaction_ids": []
+        },
+        {
+          "original_name": "200 sheets of cardstock",
+          "item_name": "Cardstock",
+          "status": "cannot_deliver_on_time",
+          "discount_rate": null,
+          "expected_arithmetic": null,
+          "transaction_ids": []
+        }
+      ],
+      "transaction_count": 0
+    }
+  },
+  {
+    "request_id": 12,
+    "request_date": "2025-04-08",
+    "status_summary": [
+      {
+        "item_name": "Cardstock",
+        "status": "fulfilled",
+        "reason_code": "ORDER_FULFILLED",
+        "quantity": 200,
+        "total_price": 27.0,
+        "delivery_date": "2025-04-12"
+      },
+      {
+        "item_name": "Standard copy paper",
+        "status": "fulfilled",
+        "reason_code": "ORDER_FULFILLED",
+        "quantity": 500,
+        "total_price": 18.0,
+        "delivery_date": "2025-04-12"
+      },
+      {
+        "item_name": "Paper napkins",
+        "status": "fulfilled",
+        "reason_code": "ORDER_FULFILLED",
+        "quantity": 100,
+        "total_price": 2.0,
+        "delivery_date": "2025-04-09"
+      }
+    ],
+    "evaluation": {
+      "passed": true,
+      "item_count": 3,
+      "items": [
+        {
+          "original_name": "200 sheets of colorful cardstock",
+          "item_name": "Cardstock",
+          "status": "fulfilled",
+          "discount_rate": 0.1,
+          "expected_arithmetic": {
+            "unit_price": 0.15,
+            "quantity": 200,
+            "expected_subtotal": 30.0,
+            "expected_total": 27.0
+          },
+          "transaction_ids": [
+            67,
+            68,
+            69
+          ]
+        },
+        {
+          "original_name": "500 sheets of standard printer paper",
+          "item_name": "Standard copy paper",
+          "status": "fulfilled",
+          "discount_rate": 0.1,
+          "expected_arithmetic": {
+            "unit_price": 0.04,
+            "quantity": 500,
+            "expected_subtotal": 20.0,
+            "expected_total": 18.0
+          },
+          "transaction_ids": [
+            70,
+            71,
+            72
+          ]
+        },
+        {
+          "original_name": "100 paper napkins",
+          "item_name": "Paper napkins",
+          "status": "fulfilled",
+          "discount_rate": 0,
+          "expected_arithmetic": {
+            "unit_price": 0.02,
+            "quantity": 100,
+            "expected_subtotal": 2.0,
+            "expected_total": 2.0
+          },
+          "transaction_ids": [
+            73,
+            74,
+            75
+          ]
+        }
+      ],
+      "transaction_count": 9
+    }
+  },
+  {
+    "request_id": 10,
+    "request_date": "2025-04-08",
+    "status_summary": [
+      {
+        "item_name": "Glossy paper",
+        "status": "fulfilled",
+        "reason_code": "ORDER_FULFILLED",
+        "quantity": 500,
+        "total_price": 90.0,
+        "delivery_date": "2025-04-12"
+      },
+      {
+        "item_name": "Cardstock",
+        "status": "fulfilled",
+        "reason_code": "ORDER_FULFILLED",
+        "quantity": 300,
+        "total_price": 40.5,
+        "delivery_date": "2025-04-12"
+      }
+    ],
+    "evaluation": {
+      "passed": true,
+      "item_count": 2,
+      "items": [
+        {
+          "original_name": "I would like to place an order for 500 sheets of high-quality glossy paper",
+          "item_name": "Glossy paper",
+          "status": "fulfilled",
+          "discount_rate": 0.1,
+          "expected_arithmetic": {
+            "unit_price": 0.2,
+            "quantity": 500,
+            "expected_subtotal": 100.0,
+            "expected_total": 90.0
+          },
+          "transaction_ids": [
+            76,
+            77,
+            78
+          ]
+        },
+        {
+          "original_name": "I would like to place an order for 300 sheets of sturdy cardstock",
+          "item_name": "Cardstock",
+          "status": "fulfilled",
+          "discount_rate": 0.1,
+          "expected_arithmetic": {
+            "unit_price": 0.15,
+            "quantity": 300,
+            "expected_subtotal": 45.0,
+            "expected_total": 40.5
+          },
+          "transaction_ids": [
+            79,
+            80,
+            81
+          ]
+        }
+      ],
+      "transaction_count": 6
+    }
+  },
+  {
+    "request_id": 11,
+    "request_date": "2025-04-08",
+    "status_summary": [
+      {
+        "item_name": "Glossy paper",
+        "status": "fulfilled",
+        "reason_code": "ORDER_FULFILLED",
+        "quantity": 500,
+        "total_price": 90.0,
+        "delivery_date": "2025-04-12"
+      },
+      {
+        "item_name": "Matte paper",
+        "status": "fulfilled",
+        "reason_code": "ORDER_FULFILLED",
+        "quantity": 300,
+        "total_price": 48.6,
+        "delivery_date": "2025-04-12"
+      }
+    ],
+    "evaluation": {
+      "passed": true,
+      "item_count": 2,
+      "items": [
+        {
+          "original_name": "I would like to order 500 sheets of A3 glossy paper",
+          "item_name": "Glossy paper",
+          "status": "fulfilled",
+          "discount_rate": 0.1,
+          "expected_arithmetic": {
+            "unit_price": 0.2,
+            "quantity": 500,
+            "expected_subtotal": 100.0,
+            "expected_total": 90.0
+          },
+          "transaction_ids": [
+            82,
+            83,
+            84
+          ]
+        },
+        {
+          "original_name": "I would like to order 300 sheets of A4 matte paper",
+          "item_name": "Matte paper",
+          "status": "fulfilled",
+          "discount_rate": 0.1,
+          "expected_arithmetic": {
+            "unit_price": 0.18,
+            "quantity": 300,
+            "expected_subtotal": 54.0,
+            "expected_total": 48.6
+          },
+          "transaction_ids": [
+            85,
+            86,
+            87
+          ]
+        }
+      ],
+      "transaction_count": 6
+    }
+  },
+  {
+    "request_id": 14,
+    "request_date": "2025-04-09",
+    "status_summary": [
+      {
+        "item_name": "A4 paper",
+        "status": "cannot_deliver_on_time",
+        "reason_code": "DELIVERY_WINDOW_UNAVAILABLE",
+        "quantity": 5000,
+        "total_price": null,
+        "delivery_date": "2025-04-16"
+      },
+      {
+        "item_name": "Poster paper",
+        "status": "fulfilled",
+        "reason_code": "ORDER_FULFILLED",
+        "quantity": 2000,
+        "total_price": 450.0,
+        "delivery_date": "2025-04-15"
+      },
+      {
+        "item_name": "Cardstock",
+        "status": "fulfilled",
+        "reason_code": "ORDER_FULFILLED",
+        "quantity": 500,
+        "total_price": 67.5,
+        "delivery_date": "2025-04-12"
+      }
+    ],
+    "evaluation": {
+      "passed": true,
+      "item_count": 3,
+      "items": [
+        {
+          "original_name": "5,000 sheets of A4 paper",
+          "item_name": "A4 paper",
+          "status": "cannot_deliver_on_time",
+          "discount_rate": null,
+          "expected_arithmetic": null,
+          "transaction_ids": []
+        },
+        {
+          "original_name": "2,000 sheets of poster paper in various colors",
+          "item_name": "Poster paper",
+          "status": "fulfilled",
+          "discount_rate": 0.1,
+          "expected_arithmetic": {
+            "unit_price": 0.25,
+            "quantity": 2000,
+            "expected_subtotal": 500.0,
+            "expected_total": 450.0
+          },
+          "transaction_ids": [
+            88,
+            89,
+            90
+          ]
+        },
+        {
+          "original_name": "500 sheets of cardstock",
+          "item_name": "Cardstock",
+          "status": "fulfilled",
+          "discount_rate": 0.1,
+          "expected_arithmetic": {
+            "unit_price": 0.15,
+            "quantity": 500,
+            "expected_subtotal": 75.0,
+            "expected_total": 67.5
+          },
+          "transaction_ids": [
+            91,
+            92,
+            93
+          ]
+        }
+      ],
+      "transaction_count": 6
+    }
+  },
+  {
+    "request_id": 15,
+    "request_date": "2025-04-12",
+    "status_summary": [
+      {
+        "item_name": "A4 paper",
+        "status": "cannot_deliver_on_time",
+        "reason_code": "DELIVERY_WINDOW_UNAVAILABLE",
+        "quantity": 10000,
+        "total_price": null,
+        "delivery_date": "2025-04-19"
+      },
+      {
+        "item_name": "Colored paper",
+        "status": "cannot_deliver_on_time",
+        "reason_code": "DELIVERY_WINDOW_UNAVAILABLE",
+        "quantity": 5000,
+        "total_price": null,
+        "delivery_date": "2025-04-19"
+      },
+      {
+        "item_name": null,
+        "status": "needs_clarification",
+        "reason_code": "QTY_CLARIFICATION_REQUIRED",
+        "quantity": null,
+        "total_price": null,
+        "delivery_date": "2025-04-15"
+      }
+    ],
+    "evaluation": {
+      "passed": true,
+      "item_count": 3,
+      "items": [
+        {
+          "original_name": "10,000 sheets of A4 white paper",
+          "item_name": "A4 paper",
+          "status": "cannot_deliver_on_time",
+          "discount_rate": null,
+          "expected_arithmetic": null,
+          "transaction_ids": []
+        },
+        {
+          "original_name": "5,000 sheets of A3 colored paper (assorted colors)",
+          "item_name": "Colored paper",
+          "status": "cannot_deliver_on_time",
+          "discount_rate": null,
+          "expected_arithmetic": null,
+          "transaction_ids": []
+        },
+        {
+          "original_name": "500 reams of cardboard for signage",
+          "item_name": null,
+          "status": "needs_clarification",
+          "discount_rate": null,
+          "expected_arithmetic": null,
+          "transaction_ids": []
+        }
+      ],
+      "transaction_count": 0
+    }
+  },
+  {
+    "request_id": 16,
+    "request_date": "2025-04-13",
+    "status_summary": [
+      {
+        "item_name": "A4 paper",
+        "status": "cannot_deliver_on_time",
+        "reason_code": "DELIVERY_WINDOW_UNAVAILABLE",
+        "quantity": 500,
+        "total_price": null,
+        "delivery_date": "2025-04-16"
+      },
+      {
+        "item_name": "Construction paper",
+        "status": "cannot_deliver_on_time",
+        "reason_code": "DELIVERY_WINDOW_UNAVAILABLE",
+        "quantity": 200,
+        "total_price": null,
+        "delivery_date": "2025-04-17"
+      },
+      {
+        "item_name": null,
+        "status": "needs_clarification",
+        "reason_code": "PRODUCT_CLARIFICATION_REQUIRED",
+        "quantity": null,
+        "total_price": null,
+        "delivery_date": "2025-04-15"
+      }
+    ],
+    "evaluation": {
+      "passed": true,
+      "item_count": 3,
+      "items": [
+        {
+          "original_name": "500 sheets of A4 printer paper",
+          "item_name": "A4 paper",
+          "status": "cannot_deliver_on_time",
+          "discount_rate": null,
+          "expected_arithmetic": null,
+          "transaction_ids": []
+        },
+        {
+          "original_name": "200 sheets of colorful construction paper",
+          "item_name": "Construction paper",
+          "status": "cannot_deliver_on_time",
+          "discount_rate": null,
+          "expected_arithmetic": null,
+          "transaction_ids": []
+        },
+        {
+          "original_name": "100 sheets of poster board",
+          "item_name": null,
+          "status": "needs_clarification",
+          "discount_rate": null,
+          "expected_arithmetic": null,
+          "transaction_ids": []
+        }
+      ],
+      "transaction_count": 0
+    }
+  },
+  {
+    "request_id": 17,
+    "request_date": "2025-04-14",
+    "status_summary": [
+      {
+        "item_name": "A4 paper",
+        "status": "cannot_deliver_on_time",
+        "reason_code": "DELIVERY_WINDOW_UNAVAILABLE",
+        "quantity": 1000,
+        "total_price": null,
+        "delivery_date": "2025-04-18"
+      },
+      {
+        "item_name": "Colored paper",
+        "status": "cannot_deliver_on_time",
+        "reason_code": "DELIVERY_WINDOW_UNAVAILABLE",
+        "quantity": 500,
+        "total_price": null,
+        "delivery_date": "2025-04-18"
+      },
+      {
+        "item_name": null,
+        "status": "needs_clarification",
+        "reason_code": "PRODUCT_CLARIFICATION_REQUIRED",
+        "quantity": null,
+        "total_price": null,
+        "delivery_date": "2025-04-15"
+      },
+      {
+        "item_name": "Paper cups",
+        "status": "cannot_deliver_on_time",
+        "reason_code": "DELIVERY_WINDOW_UNAVAILABLE",
+        "quantity": 1000,
+        "total_price": null,
+        "delivery_date": "2025-04-18"
+      },
+      {
+        "item_name": "Paper plates",
+        "status": "fulfilled",
+        "reason_code": "ORDER_FULFILLED",
+        "quantity": 500,
+        "total_price": 45.0,
+        "delivery_date": "2025-04-14"
+      }
+    ],
+    "evaluation": {
+      "passed": true,
+      "item_count": 5,
+      "items": [
+        {
+          "original_name": "1000 sheets of A4 white printer paper",
+          "item_name": "A4 paper",
+          "status": "cannot_deliver_on_time",
+          "discount_rate": null,
+          "expected_arithmetic": null,
+          "transaction_ids": []
+        },
+        {
+          "original_name": "500 sheets of A3 colored paper (assorted colors)",
+          "item_name": "Colored paper",
+          "status": "cannot_deliver_on_time",
+          "discount_rate": null,
+          "expected_arithmetic": null,
+          "transaction_ids": []
+        },
+        {
+          "original_name": "2000 table napkins (white)",
+          "item_name": null,
+          "status": "needs_clarification",
+          "discount_rate": null,
+          "expected_arithmetic": null,
+          "transaction_ids": []
+        },
+        {
+          "original_name": "1000 paper cups (biodegradable)",
+          "item_name": "Paper cups",
+          "status": "cannot_deliver_on_time",
+          "discount_rate": null,
+          "expected_arithmetic": null,
+          "transaction_ids": []
+        },
+        {
+          "original_name": "500 paper plates (biodegradable)",
+          "item_name": "Paper plates",
+          "status": "fulfilled",
+          "discount_rate": 0.1,
+          "expected_arithmetic": {
+            "unit_price": 0.1,
+            "quantity": 500,
+            "expected_subtotal": 50.0,
+            "expected_total": 45.0
+          },
+          "transaction_ids": [
+            94
+          ]
+        }
+      ],
+      "transaction_count": 1
+    }
+  },
+  {
+    "request_id": 18,
+    "request_date": "2025-04-14",
+    "status_summary": [
+      {
+        "item_name": "Cardstock",
+        "status": "fulfilled",
+        "reason_code": "ORDER_FULFILLED",
+        "quantity": 500,
+        "total_price": 67.5,
+        "delivery_date": "2025-04-14"
+      },
+      {
+        "item_name": null,
+        "status": "needs_clarification",
+        "reason_code": "PRODUCT_CLARIFICATION_REQUIRED",
+        "quantity": null,
+        "total_price": null,
+        "delivery_date": "2025-04-15"
+      },
+      {
+        "item_name": "Colored paper",
+        "status": "fulfilled",
+        "reason_code": "ORDER_FULFILLED",
+        "quantity": 200,
+        "total_price": 18.0,
+        "delivery_date": "2025-04-15"
+      }
+    ],
+    "evaluation": {
+      "passed": true,
+      "item_count": 3,
+      "items": [
+        {
+          "original_name": "500 sheets of high-quality white cardstock",
+          "item_name": "Cardstock",
+          "status": "fulfilled",
+          "discount_rate": 0.1,
+          "expected_arithmetic": {
+            "unit_price": 0.15,
+            "quantity": 500,
+            "expected_subtotal": 75.0,
+            "expected_total": 67.5
+          },
+          "transaction_ids": [
+            95
+          ]
+        },
+        {
+          "original_name": "1000 sheets of standard printing paper",
+          "item_name": null,
+          "status": "needs_clarification",
+          "discount_rate": null,
+          "expected_arithmetic": null,
+          "transaction_ids": []
+        },
+        {
+          "original_name": "200 sheets of colored paper in assorted colors",
+          "item_name": "Colored paper",
+          "status": "fulfilled",
+          "discount_rate": 0.1,
+          "expected_arithmetic": {
+            "unit_price": 0.1,
+            "quantity": 200,
+            "expected_subtotal": 20.0,
+            "expected_total": 18.0
+          },
+          "transaction_ids": [
+            96,
+            97,
+            98
+          ]
+        }
+      ],
+      "transaction_count": 4
+    }
+  },
+  {
+    "request_id": 19,
+    "request_date": "2025-04-15",
+    "status_summary": [
+      {
+        "item_name": "Glossy paper",
+        "status": "cannot_deliver_on_time",
+        "reason_code": "DELIVERY_WINDOW_UNAVAILABLE",
+        "quantity": 2000,
+        "total_price": null,
+        "delivery_date": "2025-04-22"
+      },
+      {
+        "item_name": null,
+        "status": "needs_clarification",
+        "reason_code": "QTY_CLARIFICATION_REQUIRED",
+        "quantity": null,
+        "total_price": null,
+        "delivery_date": "2025-04-20"
+      },
+      {
+        "item_name": "Cardstock",
+        "status": "fulfilled",
+        "reason_code": "ORDER_FULFILLED",
+        "quantity": 1000,
+        "total_price": 135.0,
+        "delivery_date": "2025-04-19"
+      }
+    ],
+    "evaluation": {
+      "passed": true,
+      "item_count": 3,
+      "items": [
+        {
+          "original_name": "2000 sheets of A4 glossy paper",
+          "item_name": "Glossy paper",
+          "status": "cannot_deliver_on_time",
+          "discount_rate": null,
+          "expected_arithmetic": null,
+          "transaction_ids": []
+        },
+        {
+          "original_name": "1500 sheets of A3 matte paper",
+          "item_name": null,
+          "status": "needs_clarification",
+          "discount_rate": null,
+          "expected_arithmetic": null,
+          "transaction_ids": []
+        },
+        {
+          "original_name": "1000 sheets of cardstock in assorted colors",
+          "item_name": "Cardstock",
+          "status": "fulfilled",
+          "discount_rate": 0.1,
+          "expected_arithmetic": {
+            "unit_price": 0.15,
+            "quantity": 1000,
+            "expected_subtotal": 150.0,
+            "expected_total": 135.0
+          },
+          "transaction_ids": [
+            99,
+            100,
+            101
+          ]
+        }
+      ],
+      "transaction_count": 3
+    }
+  },
+  {
+    "request_id": 20,
+    "request_date": "2025-04-17",
+    "status_summary": [
+      {
+        "item_name": "Flyers",
+        "status": "fulfilled",
+        "reason_code": "ORDER_FULFILLED",
+        "quantity": 5000,
+        "total_price": 750.0,
+        "delivery_date": "2025-04-24"
+      },
+      {
+        "item_name": null,
+        "status": "needs_clarification",
+        "reason_code": "PRODUCT_CLARIFICATION_REQUIRED",
+        "quantity": null,
+        "total_price": null,
+        "delivery_date": "2025-05-15"
+      },
+      {
+        "item_name": null,
+        "status": "needs_clarification",
+        "reason_code": "PRODUCT_CLARIFICATION_REQUIRED",
+        "quantity": null,
+        "total_price": null,
+        "delivery_date": "2025-05-15"
+      }
+    ],
+    "evaluation": {
+      "passed": true,
+      "item_count": 3,
+      "items": [
+        {
+          "original_name": "5,000 flyers",
+          "item_name": "Flyers",
+          "status": "fulfilled",
+          "discount_rate": 0,
+          "expected_arithmetic": {
+            "unit_price": 0.15,
+            "quantity": 5000,
+            "expected_subtotal": 750.0,
+            "expected_total": 750.0
+          },
+          "transaction_ids": [
+            102,
+            103,
+            104
+          ]
+        },
+        {
+          "original_name": "2,000 posters",
+          "item_name": null,
+          "status": "needs_clarification",
+          "discount_rate": null,
+          "expected_arithmetic": null,
+          "transaction_ids": []
+        },
+        {
+          "original_name": "10,000 tickets",
+          "item_name": null,
+          "status": "needs_clarification",
+          "discount_rate": null,
+          "expected_arithmetic": null,
+          "transaction_ids": []
+        }
+      ],
+      "transaction_count": 3
+    }
+  }
+]

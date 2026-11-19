@@ -1,6 +1,7 @@
 import ast
 import json
 import os
+import re
 import time
 from datetime import datetime, timedelta
 from typing import Any
@@ -16,6 +17,10 @@ from smolagents import (
 )
 from sqlalchemy import Engine, create_engine
 from sqlalchemy.sql import text
+
+from event_emitter import emitter
+from terminal_visualizer import TerminalVisualizer
+from workflow_events import WorkflowEvent
 
 # Create an SQLite database
 db_engine = create_engine("sqlite:///munder_difflin.db")
@@ -1277,6 +1282,183 @@ def evaluate_workflow_response(response: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _customer_safe_text(value: Any) -> str:
+    """Remove contact details from text that may be shown to a customer."""
+    text = str(value or "").strip()
+    text = re.sub(
+        r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b",
+        "[email omitted]",
+        text,
+        flags=re.IGNORECASE,
+    )
+    text = re.sub(
+        r"(?<!\w)(?:\+\d{1,3}[\s.-]?)?"
+        r"(?:\(\d{3}\)|\d{3})[\s.-]\d{3}[\s.-]\d{4}(?!\w)",
+        "[phone omitted]",
+        text,
+    )
+    technical_replacements = (
+        (r"\s*'' is not an exact catalog item\.\s*", " "),
+        (
+            r"\s*Quantity could not be converted to a positive catalog unit\.\s*",
+            " Please provide the quantity in catalog units, such as sheets. ",
+        ),
+        (
+            r"\s*No catalog item was confidently identified\.\s*",
+            " Please specify an exact catalog product. ",
+        ),
+    )
+    for pattern, replacement in technical_replacements:
+        text = re.sub(pattern, replacement, text)
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def _customer_reason_code(item: dict[str, Any]) -> str:
+    status = item.get("status")
+    if status == "fulfilled":
+        return "ORDER_FULFILLED"
+    if status == "cannot_deliver_on_time":
+        return "DELIVERY_WINDOW_UNAVAILABLE"
+    if status == "needs_clarification":
+        message = str(item.get("message", "")).lower()
+        if "quantity" in message or "unit" in message or "conversion" in message:
+            return "QTY_CLARIFICATION_REQUIRED"
+        return "PRODUCT_CLARIFICATION_REQUIRED"
+    return "ORDER_REVIEW_REQUIRED"
+
+
+def _item_customer_description(item: dict[str, Any]) -> str:
+    if item.get("item_name"):
+        name = str(item["item_name"])
+        quantity = item.get("quote", {}).get("requested_quantity")
+        if quantity is None:
+            quantity = item.get("inventory", {}).get("requested_quantity")
+        if quantity is not None:
+            return f"{quantity:,} unit(s) of {name}"
+        return name
+    return _customer_safe_text(item.get("original_name") or "the requested item")
+
+
+def format_customer_response(response: dict[str, Any]) -> str:
+    """Build a customer-safe message without exposing workflow internals."""
+    deadline = response.get("requested_delivery_date", "the requested date")
+    lines = [
+        f"Thank you. We reviewed your request for delivery by {deadline}.",
+        "",
+        "Order update:",
+    ]
+
+    for item in response.get("items", []):
+        description = _item_customer_description(item)
+        lines.append(f"- {description}")
+
+        if item.get("status") == "fulfilled":
+            quote = item["quote"]
+            lines.append(f"  Confirmed: ${float(quote['total_price']):.2f}.")
+            lines.append("  How we calculated this:")
+            lines.append(
+                f"  - Catalog price: ${float(quote['unit_price']):.2f} "
+                f"x {int(quote['requested_quantity']):,} = "
+                f"${float(quote['subtotal']):.2f}."
+            )
+            lines.append(
+                f"  - Bulk discount: {float(quote['discount']) * 100:.0f}%."
+            )
+            lines.append(
+                f"  - Final quoted total: ${float(quote['total_price']):.2f}; "
+                "no tax or separate shipping charge is configured."
+            )
+            transactions = item.get("fulfillment", {}).get("transactions", [])
+            transaction_dates = sorted(
+                {
+                    transaction["transaction_date"]
+                    for transaction in transactions
+                    if isinstance(transaction, dict)
+                    and isinstance(transaction.get("transaction_date"), str)
+                }
+            )
+            if transaction_dates:
+                lines.append(
+                    f"  - Expected fulfillment date: {transaction_dates[-1]}."
+                )
+        elif item.get("status") == "cannot_deliver_on_time":
+            inventory = item.get("inventory", {})
+            available_date = inventory.get("delivery_date") or "a later date"
+            lines.append(
+                f"  Not confirmed: we can deliver this item on {available_date}, "
+                f"not by {deadline}."
+            )
+            lines.append(
+                "  Next step: approve the later date or remove this item "
+                "from the request."
+            )
+        elif item.get("status") == "needs_clarification":
+            reason = _customer_safe_text(item.get("message"))
+            if not reason:
+                reason = "We need one more detail before we can confirm this item."
+            lines.append(
+                f"  More information needed: {reason}"
+            )
+            candidates = item.get("candidates") or []
+            if candidates:
+                candidate_names = [str(candidate) for candidate in candidates[:5]]
+                remaining = len(candidates) - len(candidate_names)
+                choices = ", ".join(candidate_names)
+                if remaining:
+                    choices += f" (plus {remaining} related catalog options)"
+                lines.append(
+                    f"  Suggested choices: {choices}."
+                )
+            else:
+                lines.append(
+                    "  Next step: confirm the exact product and quantity in "
+                    "catalog units."
+                )
+        else:
+            lines.append(
+                "  We could not complete this item. "
+                "Please review the request and try again."
+            )
+
+    fulfilled = sum(
+        item.get("status") == "fulfilled" for item in response.get("items", [])
+    )
+    total_items = len(response.get("items", []))
+    lines.extend(
+        [
+            "",
+            f"Summary: {fulfilled} of {total_items} item(s) confirmed.",
+        ]
+    )
+    if fulfilled < total_items:
+        lines.append(
+            "The unresolved items listed above do not prevent confirmed items "
+            "from being fulfilled."
+        )
+    return "\n".join(lines)
+
+
+def customer_status_summary(response: dict[str, Any]) -> list[dict[str, Any]]:
+    """Return the minimal structured data needed to audit customer messages."""
+    return [
+        {
+            "item_name": item.get("item_name"),
+            "status": item.get("status"),
+            "reason_code": _customer_reason_code(item),
+            "quantity": (
+                item.get("quote", {}).get("requested_quantity")
+                or item.get("inventory", {}).get("requested_quantity")
+            ),
+            "total_price": item.get("quote", {}).get("total_price"),
+            "delivery_date": (
+                item.get("inventory", {}).get("delivery_date")
+                or response.get("requested_delivery_date")
+            ),
+        }
+        for item in response.get("items", [])
+    ]
+
+
 class QuoteResultTool(Tool):
     """Return a schema-constrained discount recommendation."""
 
@@ -1767,13 +1949,46 @@ class OrchestrationAgent(ToolCallingAgent):
         )
 
     def handle_request(
-        self, request: str, request_date: str, job: str, event: str
+        self, request: str, request_date: str, job: str, event: str,
+        request_id: str | None = None,
     ):
+        request_id = request_id or f"request-{request_date}"
+
+        def report_progress(
+            event_type: str,
+            stage: str,
+            description: str,
+            item_id: str | None = None,
+            details: dict[str, Any] | None = None,
+        ) -> None:
+            emitter.emit(WorkflowEvent(
+                event_type=event_type,
+                stage=stage,
+                timestamp=datetime.now(),
+                description=description,
+                request_id=request_id,
+                item_id=item_id,
+                details=details,
+            ))
+
+        report_progress(
+            "extraction", "started", "Extracting requested products and dates."
+        )
         processed = self.tools["process_request"](
             request=request,
             request_date=request_date,
             job=job,
             event=event,
+        )
+        report_progress(
+            "extraction",
+            "completed",
+            f"Extracted {len(processed['items'])} requested item(s).",
+            details={
+                "item_count": len(processed["items"]),
+                "needs_clarification": processed["needs_clarification"],
+                "delivery_date": processed["requested_delivery_date"],
+            },
         )
         item_results = []
 
@@ -1790,6 +2005,12 @@ class OrchestrationAgent(ToolCallingAgent):
                 )
                 continue
 
+            report_progress(
+                "inventory",
+                "started",
+                f"Checking inventory for {item['item_name']}.",
+                item["item_name"],
+            )
             inventory = self.tools["check_inventory"](
                 item_name=item["item_name"],
                 quantity=item["quantity"],
@@ -1799,6 +2020,16 @@ class OrchestrationAgent(ToolCallingAgent):
                 can_fulfill_by_delivery_date(
                     inventory, processed["requested_delivery_date"]
                 )
+            )
+            report_progress(
+                "inventory",
+                "completed",
+                (
+                    f"{item['item_name']} inventory verified; "
+                    f"{inventory['current_stock']} currently available."
+                ),
+                item["item_name"],
+                details=inventory,
             )
             if not inventory["order_will_be_fulfilled_on_time"]:
                 item_results.append(
@@ -1820,12 +2051,25 @@ class OrchestrationAgent(ToolCallingAgent):
                 )
                 continue
 
+            report_progress(
+                "pricing",
+                "started",
+                f"Calculating a quote for {item['item_name']}.",
+                item["item_name"],
+            )
             pricing = self.tools["get_pricing"](
                 item_name=item["item_name"],
                 quantity=item["quantity"],
                 order_date=processed["request_date"],
                 job=processed["job"],
                 event=processed["event"],
+            )
+            report_progress(
+                "pricing",
+                "completed",
+                f"Calculated ${pricing['total_price']:.2f} for {item['item_name']}.",
+                item["item_name"],
+                details=pricing,
             )
 
             result = {
@@ -1835,6 +2079,12 @@ class OrchestrationAgent(ToolCallingAgent):
                 "quote": pricing,
                 "pricing_explanation": pricing["pricing_explanation"],
             }
+            report_progress(
+                "fulfillment",
+                "started",
+                f"Executing the order for {item['item_name']}.",
+                item["item_name"],
+            )
             result["fulfillment"] = self.tools["finalize_order"](
                 item_name=item["item_name"],
                 quantity=item["quantity"],
@@ -1843,6 +2093,13 @@ class OrchestrationAgent(ToolCallingAgent):
             )
             result["status"] = "fulfilled"
             item_results.append(result)
+            report_progress(
+                "fulfillment",
+                "completed",
+                f"Fulfilled {item['quantity']} unit(s) of {item['item_name']}.",
+                item["item_name"],
+                details=result["fulfillment"],
+            )
 
         return {
             "request_date": processed["request_date"],
@@ -1886,8 +2143,11 @@ def run_test_scenarios():
     ############
     ############
     orchestration_agent = OrchestrationAgent(model)
+    visualizer = TerminalVisualizer(max_history=8)
+    emitter.subscribe(visualizer.on_event)
 
     results = []
+    debug_results = []
     for idx, row in quote_requests_sample.iterrows():
         request_date = row["request_date"].strftime("%Y-%m-%d")
 
@@ -1905,20 +2165,46 @@ def run_test_scenarios():
         ############
         ############
 
-        response = orchestration_agent.handle_request(
-            request=row["request"],
-            request_date=request_date,
-            job=row["job"],
-            event=row["event"],
-        )
-        response["evaluation"] = evaluate_workflow_response(response)
+        try:
+            response = orchestration_agent.handle_request(
+                request=row["request"],
+                request_date=request_date,
+                job=row["job"],
+                event=row["event"],
+                request_id=str(idx + 1),
+            )
+            response["evaluation"] = evaluate_workflow_response(response)
+            customer_response = format_customer_response(response)
+            status_summary = customer_status_summary(response)
+        except Exception as exc:
+            print(
+                f"Request {idx + 1} failed internally "
+                f"({type(exc).__name__}): {exc}"
+            )
+            customer_response = (
+                "We could not finish processing this request. "
+                "Please try again with a smaller quantity or confirm the exact "
+                "product and delivery date."
+            )
+            status_summary = [
+                {
+                    "status": "error",
+                    "reason_code": "REQUEST_PROCESSING_ERROR",
+                }
+            ]
+            response = {
+                "evaluation": {
+                    "passed": False,
+                    "reason_code": "REQUEST_PROCESSING_ERROR",
+                }
+            }
 
         # Update state
         report = generate_financial_report(request_date)
         current_cash = report["cash_balance"]
         current_inventory = report["inventory_value"]
 
-        print(f"Response: {response}")
+        print(f"\nCustomer response:\n{customer_response}")
         print(f"Updated Cash: ${current_cash:.2f}")
         print(f"Updated Inventory: ${current_inventory:.2f}")
 
@@ -1926,9 +2212,15 @@ def run_test_scenarios():
             {
                 "request_id": idx + 1,
                 "request_date": request_date,
-                "cash_balance": current_cash,
-                "inventory_value": current_inventory,
-                "response": json.dumps(response),
+                "response": customer_response,
+            }
+        )
+        debug_results.append(
+            {
+                "request_id": int(idx + 1),
+                "request_date": request_date,
+                "status_summary": status_summary,
+                "evaluation": response["evaluation"],
             }
         )
 
@@ -1943,6 +2235,9 @@ def run_test_scenarios():
 
     # Save results
     pd.DataFrame(results).to_csv("test_results.csv", index=False)
+    with open("test_results_debug.json", "w", encoding="utf-8") as debug_file:
+        json.dump(debug_results, debug_file, indent=2, ensure_ascii=False)
+    emitter.unsubscribe(visualizer.on_event)
     return results
 
 

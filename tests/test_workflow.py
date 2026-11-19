@@ -218,6 +218,180 @@ class WorkflowTests(unittest.TestCase):
             },
         )
 
+    def test_terminal_listener_does_not_change_workflow_result(self):
+        agent = project.OrchestrationAgent(Mock())
+        processed = {
+            "items": [
+                {
+                    "original_name": "10 A4 sheets",
+                    "item_name": "A4 paper",
+                    "quantity": 10,
+                    "requested_attributes": ["A4"],
+                    "candidates": [],
+                    "clarification_required": False,
+                    "clarification_message": "",
+                }
+            ],
+            "request_date": "2025-01-01",
+            "requested_delivery_date": "2025-01-05",
+            "job": "manager",
+            "event": "meeting",
+            "needs_clarification": False,
+        }
+        inventory = {
+            "item_name": "A4 paper",
+            "exists": True,
+            "requested_quantity": 10,
+            "current_stock": 10,
+            "enough_stock": True,
+            "shortage": 0,
+            "delivery_date": "2025-01-01",
+            "order_will_be_fulfilled_on_time": True,
+        }
+        pricing = {
+            "item_name": "A4 paper",
+            "requested_quantity": 10,
+            "discount": 0,
+            "total_price": 0.5,
+            "pricing_explanation": "Base price.",
+        }
+        fulfillment = {
+            "item_name": "A4 paper",
+            "requested_quantity": 10,
+            "transaction_type": "sales",
+            "status": "fulfilled",
+            "transactions": [],
+        }
+        project.emitter.clear()
+
+        def broken_listener(_event):
+            raise RuntimeError("Terminal display failed")
+
+        project.emitter.subscribe(broken_listener)
+        try:
+            with (
+                patch.object(
+                    agent.tools["process_request"], "forward",
+                    return_value=processed,
+                ),
+                patch.object(
+                    agent.tools["check_inventory"], "forward",
+                    return_value=inventory,
+                ),
+                patch.object(
+                    agent.tools["get_pricing"], "forward",
+                    return_value=pricing,
+                ),
+                patch.object(
+                    agent.tools["finalize_order"], "forward",
+                    return_value=fulfillment,
+                ),
+            ):
+                result = agent.handle_request(
+                    "A4 paper request",
+                    "2025-01-01",
+                    "manager",
+                    "meeting",
+                    request_id="REQ-001",
+                )
+        finally:
+            project.emitter.unsubscribe(broken_listener)
+
+        self.assertEqual(result["items"][0]["fulfillment"], fulfillment)
+        self.assertEqual(result["items"][0]["status"], "fulfilled")
+        event_types = [
+            event.event_type
+            for event in project.emitter.get_events(request_id="REQ-001")
+        ]
+        self.assertEqual(
+            event_types,
+            [
+                "extraction",
+                "extraction",
+                "inventory",
+                "inventory",
+                "pricing",
+                "pricing",
+                "fulfillment",
+                "fulfillment",
+            ],
+        )
+
+    def test_customer_response_is_readable_explainable_and_safe(self):
+        response = {
+            "request_date": "2025-01-01",
+            "requested_delivery_date": "2025-01-10",
+            "job": "private customer role",
+            "event": "private occasion",
+            "items": [
+                {
+                    "original_name": "10 A4 sheets",
+                    "item_name": "A4 paper",
+                    "status": "fulfilled",
+                    "inventory": {
+                        "requested_quantity": 10,
+                        "delivery_date": "2025-01-01",
+                    },
+                    "quote": {
+                        "requested_quantity": 10,
+                        "unit_price": 0.05,
+                        "subtotal": 0.5,
+                        "discount": 0.1,
+                        "total_price": 0.45,
+                    },
+                    "fulfillment": {
+                        "transactions": [
+                            {"transaction_date": "2025-01-01"}
+                        ]
+                    },
+                },
+                {
+                    "original_name": "200 specialty sheets",
+                    "item_name": "Cardstock",
+                    "status": "cannot_deliver_on_time",
+                    "inventory": {
+                        "requested_quantity": 200,
+                        "delivery_date": "2025-01-15",
+                    },
+                },
+                {
+                    "original_name": (
+                        "Paper for jane@example.com, call 212-555-0199"
+                    ),
+                    "item_name": None,
+                    "status": "needs_clarification",
+                    "message": (
+                        "Please confirm the quantity with jane@example.com "
+                        "or call 212-555-0199."
+                    ),
+                    "candidates": ["A4 paper", "Cardstock"],
+                },
+            ],
+        }
+
+        message = project.format_customer_response(response)
+        summary = project.customer_status_summary(response)
+
+        self.assertIn("How we calculated this:", message)
+        self.assertIn("Catalog price: $0.05 x 10 = $0.50.", message)
+        self.assertIn("Bulk discount: 10%.", message)
+        self.assertNotIn("Reason code:", message)
+        self.assertNotIn("ORDER_FULFILLED", message)
+        self.assertNotIn("DELIVERY_WINDOW_UNAVAILABLE", message)
+        self.assertNotIn("QTY_CLARIFICATION_REQUIRED", message)
+        self.assertNotIn('{"', message)
+        self.assertNotIn("jane@example.com", message)
+        self.assertNotIn("212-555-0199", message)
+        self.assertNotIn("private occasion", message)
+        self.assertEqual(
+            [item["reason_code"] for item in summary],
+            [
+                "ORDER_FULFILLED",
+                "DELIVERY_WINDOW_UNAVAILABLE",
+                "QTY_CLARIFICATION_REQUIRED",
+            ],
+        )
+
     def test_handle_request_stops_before_fulfillment_when_stock_is_short(self):
         agent = project.OrchestrationAgent(Mock())
         processed = {
