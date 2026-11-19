@@ -84,7 +84,7 @@ At the request dates shown in the first and final recorded rows:
   committed together by `execute_order`.
 - **Catalog-only fulfillment:** a valid catalog item can be ordered even if the
   sampled inventory did not initially include it.
-- **Test coverage:** 32 deterministic workflow tests pass, with 4 optional
+- **Test coverage:** 34 deterministic workflow tests pass, with 4 optional
   real-LLM integration tests available separately.
 
 ## 4. Areas for Improvement
@@ -157,9 +157,11 @@ would make the evaluation output easier to parse and reuse:
 3. **Add delivery-deadline metrics.** Track whether each item can meet the
    requested deadline and how many fulfillment days remain.
 
-4. **Add evaluation assertions and JSON output.** Record item status, exact
-   product mapping, discount rate, expected arithmetic, and transaction IDs as
-   structured JSON. This would allow the CSV to be evaluated automatically.
+4. **Expand evaluation assertions.** The current runner serializes responses as
+   JSON and validates exact product mappings, item statuses, numeric discount
+   rates, expected arithmetic, transaction types, dates, and unique transaction
+   IDs. Future work can add expected mapping and outcome fixtures for every CSV
+   request.
 
 5. **Add an approval stage for purchases.** Inventory and quotes can be
    generated automatically, but final purchase and sale transactions should be

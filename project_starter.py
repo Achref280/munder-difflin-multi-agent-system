@@ -786,7 +786,7 @@ def get_stock_inventory(
     if not item_exists(item_name):
         return {"item_name": item_name, "item_exists": False}
     stock_df = get_stock_level(item_name, as_of_date)
-    current_stock = stock_df["current_stock"].iloc[0]
+    current_stock = int(stock_df["current_stock"].iloc[0])
     shortage = max(0, quantity - current_stock)
 
     delivery_date = order_date
@@ -1000,7 +1000,10 @@ def parse_agent_value(response: Any) -> Any:
             repaired_response = "".join(repaired)
             if repaired_response != response:
                 try:
-                    return json.loads(repaired_response)
+                    parsed = json.loads(repaired_response)
+                    if isinstance(parsed, str):
+                        return parse_agent_value(parsed)
+                    return parsed
                 except json.JSONDecodeError:
                     pass
 
@@ -1030,6 +1033,11 @@ def parse_agent_value(response: Any) -> Any:
             try:
                 return ast.literal_eval(python_literal)
             except (SyntaxError, ValueError):
+                if response.rstrip().endswith("'}"):
+                    try:
+                        return ast.literal_eval(python_literal[:-2] + '"}')
+                    except (SyntaxError, ValueError):
+                        pass
                 raise json_error
     return response
 
@@ -1157,6 +1165,151 @@ def can_fulfill_by_delivery_date(
         raise ValueError("Delivery dates must use ISO format") from exc
 
 
+def evaluate_workflow_response(response: dict[str, Any]) -> dict[str, Any]:
+    """Validate a workflow result and return machine-readable evaluation metrics."""
+    valid_statuses = {
+        "fulfilled",
+        "cannot_deliver_on_time",
+        "needs_clarification",
+    }
+    catalog = {item["item_name"]: item for item in paper_supplies}
+    evaluated_items = []
+    transaction_ids = []
+
+    datetime.fromisoformat(response["request_date"])
+    datetime.fromisoformat(response["requested_delivery_date"])
+
+    for item in response["items"]:
+        status = item.get("status")
+        if status not in valid_statuses:
+            raise AssertionError(f"Unexpected item status: {status!r}")
+
+        item_name = item.get("item_name")
+        quote = item.get("quote")
+        fulfillment = item.get("fulfillment")
+        expected_arithmetic = None
+        discount_rate = None
+
+        if status != "needs_clarification":
+            if item_name not in catalog:
+                raise AssertionError(f"Non-catalog product mapping: {item_name!r}")
+        elif item_name is not None:
+            raise AssertionError("Clarification item must not have a mapped item")
+
+        if status == "fulfilled":
+            if not isinstance(quote, dict):
+                raise AssertionError("Fulfilled item is missing its quote")
+            if quote.get("item_name") != item_name:
+                raise AssertionError("Quote item does not match catalog mapping")
+
+            discount_rate = quote.get("discount")
+            if (
+                isinstance(discount_rate, bool)
+                or not isinstance(discount_rate, (int, float))
+                or not 0 <= discount_rate <= 1
+            ):
+                raise AssertionError("Discount rate must be numeric between 0 and 1")
+
+            unit_price = float(catalog[item_name]["unit_price"])
+            quantity = int(quote["requested_quantity"])
+            expected_subtotal = round(unit_price * quantity, 2)
+            expected_total = round(
+                expected_subtotal * (1 - float(discount_rate)), 2
+            )
+            expected_arithmetic = {
+                "unit_price": unit_price,
+                "quantity": quantity,
+                "expected_subtotal": expected_subtotal,
+                "expected_total": expected_total,
+            }
+            if not abs(float(quote["unit_price"]) - unit_price) < 1e-9:
+                raise AssertionError("Quote unit price differs from catalog price")
+            if abs(float(quote["subtotal"]) - expected_subtotal) >= 0.01:
+                raise AssertionError("Quote subtotal does not match expected amount")
+            if abs(float(quote["total_price"]) - expected_total) >= 0.01:
+                raise AssertionError("Quote total does not match discount arithmetic")
+
+            if not isinstance(fulfillment, dict):
+                raise AssertionError("Fulfilled item is missing fulfillment")
+            transactions = fulfillment.get("transactions")
+            if not isinstance(transactions, list) or not transactions:
+                raise AssertionError("Fulfilled item has no recorded transactions")
+            for transaction in transactions:
+                transaction_id = transaction.get("transaction_id")
+                if not isinstance(transaction_id, int):
+                    raise AssertionError("Every transaction must have an integer ID")
+                if transaction.get("item_name") != item_name:
+                    raise AssertionError("Transaction item differs from product mapping")
+                if transaction.get("transaction_type") not in {
+                    "sales",
+                    "stock_orders",
+                }:
+                    raise AssertionError("Unexpected transaction type")
+                datetime.fromisoformat(transaction["transaction_date"])
+                transaction_ids.append(transaction_id)
+
+        evaluated_items.append(
+            {
+                "original_name": item["original_name"],
+                "item_name": item_name,
+                "status": status,
+                "discount_rate": discount_rate,
+                "expected_arithmetic": expected_arithmetic,
+                "transaction_ids": (
+                    [
+                        transaction["transaction_id"]
+                        for transaction in fulfillment["transactions"]
+                    ]
+                    if status == "fulfilled"
+                    else []
+                ),
+            }
+        )
+
+    if len(transaction_ids) != len(set(transaction_ids)):
+        raise AssertionError("Transaction IDs must be unique within a response")
+
+    return {
+        "passed": True,
+        "item_count": len(evaluated_items),
+        "items": evaluated_items,
+        "transaction_count": len(transaction_ids),
+    }
+
+
+class QuoteResultTool(Tool):
+    """Return a schema-constrained discount recommendation."""
+
+    name = "final_answer"
+    description = "Return the discount recommendation and pricing explanation."
+    output_type = "object"
+    inputs = {
+        "answer": {
+            "type": "object",
+            "description": "The quote decision.",
+            "properties": {
+                "item_name": {"type": "string"},
+                "requested_quantity": {"type": "integer"},
+                "discount": {
+                    "type": "number",
+                    "description": "Decimal discount rate from 0 through 1.",
+                },
+                "pricing_explanation": {"type": "string"},
+            },
+            "required": [
+                "item_name",
+                "requested_quantity",
+                "discount",
+                "pricing_explanation",
+            ],
+            "additionalProperties": False,
+        }
+    }
+
+    def forward(self, answer: dict[str, Any]) -> dict[str, Any]:
+        return answer
+
+
 class RequestResultTool(Tool):
     """Return a schema-constrained extracted request from the processor."""
 
@@ -1228,6 +1381,49 @@ class RequestResultTool(Tool):
         return answer
 
 
+class OrderResultTool(Tool):
+    """Return the exact transaction array produced by execute_order."""
+
+    name = "final_answer"
+    description = "Return the transactions committed for the order."
+    output_type = "array"
+    inputs = {
+        "answer": {
+            "type": "array",
+            "description": "The exact transaction array returned by execute_order.",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "transaction_id": {"type": "integer"},
+                    "item_name": {"type": "string"},
+                    "requested_quantity": {"type": "integer"},
+                    "transaction_type": {
+                        "type": "string",
+                        "enum": ["stock_orders", "sales"],
+                    },
+                    "status": {
+                        "type": "string",
+                        "enum": ["completed"],
+                    },
+                    "transaction_date": {"type": "string"},
+                },
+                "required": [
+                    "transaction_id",
+                    "item_name",
+                    "requested_quantity",
+                    "transaction_type",
+                    "status",
+                    "transaction_date",
+                ],
+                "additionalProperties": False,
+            },
+        }
+    }
+
+    def forward(self, answer: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        return answer
+
+
 class RequestProcessorAgent(ToolCallingAgent):
     """Agent responsible for processing requests."""
 
@@ -1258,6 +1454,7 @@ class QuoteAgent(ToolCallingAgent):
     def __init__(self, model):
         super().__init__(
             tools=[
+                QuoteResultTool(),
                 search_quote_history,
                 get_stock_inventory,
                 get_cash_balance,
@@ -1275,6 +1472,7 @@ class OrderAgent(ToolCallingAgent):
     def __init__(self, model):
         super().__init__(
             tools=[
+                OrderResultTool(),
                 execute_order,
             ],
             model=model,
@@ -1713,6 +1911,7 @@ def run_test_scenarios():
             job=row["job"],
             event=row["event"],
         )
+        response["evaluation"] = evaluate_workflow_response(response)
 
         # Update state
         report = generate_financial_report(request_date)
@@ -1729,7 +1928,7 @@ def run_test_scenarios():
                 "request_date": request_date,
                 "cash_balance": current_cash,
                 "inventory_value": current_inventory,
-                "response": response,
+                "response": json.dumps(response),
             }
         )
 

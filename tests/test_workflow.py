@@ -185,6 +185,27 @@ class WorkflowTests(unittest.TestCase):
             item_schema["properties"]["item_name"]["type"], "string"
         )
 
+    def test_quote_agent_uses_structured_final_answer_schema(self):
+        agent = project.QuoteAgent(Mock())
+        final_answer = agent.tools["final_answer"]
+        self.assertIsInstance(final_answer, project.QuoteResultTool)
+        answer_schema = final_answer.inputs["answer"]
+        self.assertEqual(answer_schema["properties"]["discount"]["type"], "number")
+        self.assertIn("pricing_explanation", answer_schema["required"])
+
+    def test_order_agent_uses_structured_final_answer_schema(self):
+        agent = project.OrderAgent(Mock())
+        final_answer = agent.tools["final_answer"]
+        self.assertIsInstance(final_answer, project.OrderResultTool)
+        answer_schema = final_answer.inputs["answer"]
+        self.assertEqual(answer_schema["type"], "array")
+        transaction_schema = answer_schema["items"]
+        self.assertEqual(
+            transaction_schema["properties"]["transaction_type"]["enum"],
+            ["stock_orders", "sales"],
+        )
+        self.assertIn("transaction_id", transaction_schema["required"])
+
     def test_orchestrator_registers_its_workflow_tools(self):
         agent = project.OrchestrationAgent(Mock())
         self.assertEqual(
@@ -578,6 +599,21 @@ class WorkflowTests(unittest.TestCase):
                 '{"order_date": "2025-04-04"} unexpected text'
             )
 
+    def test_parse_agent_value_repairs_stray_apostrophe_before_brace(self):
+        response = (
+            '{"item_name":"Colored paper","requested_quantity":200,'
+            '"discount":0.1,"pricing_explanation":"Final amount is 18.00.\'}'
+        )
+        self.assertEqual(
+            project.parse_agent_value(response),
+            {
+                "item_name": "Colored paper",
+                "requested_quantity": 200,
+                "discount": 0.1,
+                "pricing_explanation": "Final amount is 18.00.",
+            },
+        )
+
     def test_parse_agent_value_repairs_unescaped_dimension_quotes(self):
         response = (
             '{"original_name":"300 poster boards (24" x 36")",'
@@ -710,6 +746,88 @@ class WorkflowTests(unittest.TestCase):
             [transaction["transaction_date"] for transaction in transactions],
             ["2025-01-02", "2025-01-01", "2025-01-02"],
         )
+
+    def test_evaluate_workflow_response_records_structured_metrics(self):
+        response = {
+            "request_date": "2025-01-01",
+            "requested_delivery_date": "2025-01-10",
+            "items": [
+                {
+                    "original_name": "10 A4 sheets",
+                    "item_name": "A4 paper",
+                    "status": "fulfilled",
+                    "quote": {
+                        "item_name": "A4 paper",
+                        "requested_quantity": 10,
+                        "unit_price": 0.05,
+                        "subtotal": 0.5,
+                        "discount": 0.1,
+                        "total_price": 0.45,
+                    },
+                    "fulfillment": {
+                        "transactions": [
+                            {
+                                "transaction_id": 1,
+                                "item_name": "A4 paper",
+                                "transaction_type": "sales",
+                                "transaction_date": "2025-01-01",
+                            }
+                        ]
+                    },
+                },
+                {
+                    "original_name": "balloons",
+                    "item_name": None,
+                    "status": "needs_clarification",
+                },
+            ],
+        }
+
+        evaluation = project.evaluate_workflow_response(response)
+
+        self.assertTrue(evaluation["passed"])
+        self.assertEqual(evaluation["item_count"], 2)
+        self.assertEqual(evaluation["transaction_count"], 1)
+        self.assertEqual(evaluation["items"][0]["discount_rate"], 0.1)
+        self.assertEqual(
+            evaluation["items"][0]["expected_arithmetic"]["expected_total"],
+            0.45,
+        )
+        self.assertEqual(evaluation["items"][0]["transaction_ids"], [1])
+
+    def test_evaluate_workflow_response_rejects_wrong_arithmetic(self):
+        response = {
+            "request_date": "2025-01-01",
+            "requested_delivery_date": "2025-01-10",
+            "items": [
+                {
+                    "original_name": "10 A4 sheets",
+                    "item_name": "A4 paper",
+                    "status": "fulfilled",
+                    "quote": {
+                        "item_name": "A4 paper",
+                        "requested_quantity": 10,
+                        "unit_price": 0.05,
+                        "subtotal": 0.5,
+                        "discount": 0.1,
+                        "total_price": 0.5,
+                    },
+                    "fulfillment": {
+                        "transactions": [
+                            {
+                                "transaction_id": 1,
+                                "item_name": "A4 paper",
+                                "transaction_type": "sales",
+                                "transaction_date": "2025-01-01",
+                            }
+                        ]
+                    },
+                }
+            ],
+        }
+
+        with self.assertRaisesRegex(AssertionError, "discount arithmetic"):
+            project.evaluate_workflow_response(response)
 
     def test_execute_order_supports_catalog_item_without_inventory_record(self):
         transactions = project.execute_order(
