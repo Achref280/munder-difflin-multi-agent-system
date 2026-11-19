@@ -89,16 +89,17 @@ At the request dates shown in the first and final recorded rows:
 
 ## 4. Areas for Improvement
 
-### Delivery-date interpretation
+### Delivery-date interpretation in the evaluated run
 
-The scenario file contains:
+The evaluated `test_results.csv` was generated before the request date and
+delivery deadline were separated. The scenario file contains:
 
 - `request_date`, such as April 1
 - A requested delivery deadline inside the customer text, often April 15
 
-The current workflow uses `request_date` as both the inventory snapshot date
-and the fulfillment deadline. This is the main reason 37 of 60 items were
-reported as too late. The system should distinguish:
+That run used `request_date` as both the inventory snapshot date and the
+fulfillment deadline. This is the main reason 37 of 60 historical items were
+reported as too late. The current code now distinguishes:
 
 ```text
 request_date
@@ -106,9 +107,10 @@ requested_delivery_date
 supplier_delivery_date
 ```
 
-### Pricing consistency
+### Pricing consistency in the evaluated run
 
-Ten items were priced, but four totals did not agree with the stated discount
+Ten historical items were priced, but four totals did not agree with the
+stated discount
 and catalog subtotal. Discount output also mixed representations such as:
 
 ```text
@@ -118,16 +120,15 @@ and catalog subtotal. Discount output also mixed representations such as:
 "10% bulk discount applied"
 ```
 
-The explanation is useful, but the arithmetic is currently still dependent on
-the LLM.
+The current implementation now requires a numeric discount rate from the Quote
+Agent and calculates unit totals in deterministic Python.
 
 ### Request extraction quality
 
-Eight of 20 top-level results contained `job: "unknown"`, while several other
-results stored phrases such as “place an order” rather than a customer role.
-The runner already supplies reliable job and event metadata, so that context
-should be passed directly into extraction or used to override incorrect LLM
-extraction.
+Eight of 20 historical results contained `job: "unknown"`, while several
+others stored phrases such as “place an order” rather than a customer role.
+The current runner now passes CSV `job` and `event` values as trusted process
+inputs and uses the LLM only for products and delivery-deadline extraction.
 
 ### Result serialization
 
@@ -140,12 +141,12 @@ would make the evaluation output easier to parse and reuse:
 
 ## 5. Recommended Improvements
 
-1. **Separate request date from delivery deadline.** Extract the requested
-   delivery date, use `request_date` for historical stock/finance checks, and
-   compare supplier delivery against the actual deadline.
+1. **Regenerate the evaluation.** Run the updated workflow to measure the effect
+   of delivery-date separation, deterministic pricing, and trusted metadata.
 
-2. **Move price arithmetic into deterministic Python.** Let the Quote Agent
-   recommend and explain a validated numeric discount, then calculate:
+2. **Expand deterministic quote rules.** Define explicit quantity tiers for the
+   discount decision while retaining the Quote Agent for recommendation and
+   rationale:
 
    ```text
    total = unit_price * quantity * (1 - discount_rate)
@@ -153,9 +154,8 @@ would make the evaluation output easier to parse and reuse:
 
    This guarantees that the quoted total always matches the stated discount.
 
-3. **Use the CSV job and event fields as trusted metadata.** Pass these values
-   explicitly to `process_request` and reserve LLM extraction for product and
-   deadline information.
+3. **Add delivery-deadline metrics.** Track whether each item can meet the
+   requested deadline and how many fulfillment days remain.
 
 4. **Add evaluation assertions and JSON output.** Record item status, exact
    product mapping, discount rate, expected arithmetic, and transaction IDs as

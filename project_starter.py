@@ -1044,7 +1044,13 @@ def parse_agent_response(response: Any) -> dict[str, Any]:
 
 def validate_extracted_request(data: dict[str, Any]) -> dict[str, Any]:
     """Validate catalog mappings without rejecting unrelated valid line items."""
-    required_request_fields = {"items", "order_date", "job", "event"}
+    required_request_fields = {
+        "items",
+        "request_date",
+        "requested_delivery_date",
+        "job",
+        "event",
+    }
     missing_request_fields = required_request_fields - data.keys()
     if missing_request_fields:
         raise ValueError(
@@ -1052,15 +1058,20 @@ def validate_extracted_request(data: dict[str, Any]) -> dict[str, Any]:
             + ", ".join(sorted(missing_request_fields))
         )
 
-    order_date = data["order_date"]
-    if not isinstance(order_date, str):
-        raise ValueError("order_date must be a YYYY-MM-DD string")
-    try:
-        datetime.fromisoformat(order_date)
-    except ValueError as exc:
-        raise ValueError(
-            f"Invalid order date '{order_date}'; expected YYYY-MM-DD."
-        ) from exc
+    for field in ("request_date", "requested_delivery_date"):
+        value = data[field]
+        if not isinstance(value, str):
+            raise ValueError(f"{field} must be a YYYY-MM-DD string")
+        try:
+            datetime.fromisoformat(value)
+        except ValueError as exc:
+            raise ValueError(
+                f"Invalid {field} '{value}'; expected YYYY-MM-DD."
+            ) from exc
+    if datetime.fromisoformat(data["requested_delivery_date"]) < datetime.fromisoformat(
+        data["request_date"]
+    ):
+        raise ValueError("Requested delivery date cannot precede the request date")
 
     items = data["items"]
     if not isinstance(items, list) or not items:
@@ -1126,10 +1137,10 @@ def validate_extracted_request(data: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def can_fulfill_by_request_date(
-    inventory: dict[str, Any], order_date: str
+def can_fulfill_by_delivery_date(
+    inventory: dict[str, Any], requested_delivery_date: str
 ) -> bool:
-    """Return whether inventory can fulfill the item no later than the request date."""
+    """Return whether inventory can fulfill the item by the requested deadline."""
     if inventory.get("exists") is not True:
         return False
     if inventory.get("enough_stock") is True:
@@ -1140,10 +1151,10 @@ def can_fulfill_by_request_date(
         return False
     try:
         return datetime.fromisoformat(delivery_date) <= datetime.fromisoformat(
-            order_date
+            requested_delivery_date
         )
     except ValueError as exc:
-        raise ValueError("Delivery and request dates must use ISO format") from exc
+        raise ValueError("Delivery dates must use ISO format") from exc
 
 
 class RequestResultTool(Tool):
@@ -1200,16 +1211,13 @@ class RequestResultTool(Tool):
                         "additionalProperties": False,
                     },
                 },
-                "order_date": {"type": "string"},
+                "requested_delivery_date": {"type": "string"},
                 "job": {"type": "string"},
                 "event": {"type": "string"},
                 "needs_clarification": {"type": "boolean"},
             },
             "required": [
                 "items",
-                "order_date",
-                "job",
-                "event",
                 "needs_clarification",
             ],
             "additionalProperties": False,
@@ -1286,11 +1294,16 @@ class OrchestrationAgent(ToolCallingAgent):
         self.order_agent = OrderAgent(model)
 
         @tool
-        def process_request(request: str) -> dict[str, Any]:
+        def process_request(
+            request: str, request_date: str, job: str, event: str
+        ) -> dict[str, Any]:
             """Process customer order information to extract details.
 
             Args:
                 request: The customer's order request
+                request_date: Trusted request date from the scenario data.
+                job: Trusted customer job from the scenario data.
+                event: Trusted event from the scenario data.
 
             Returns:
                 Extracted request information, including validated and blocked items.
@@ -1320,10 +1333,10 @@ class OrchestrationAgent(ToolCallingAgent):
                   be exact names from the supplied catalog. Explain what clarification
                   is needed.
                 - A problematic item must not block valid items in the same request.
-                - Extract the order date, customer job, and event from the full request
-                  or its appended context. Phrases such as "for a meeting" identify
-                  the event as "meeting"; do not return "unknown" when the value is
-                  explicitly present.
+                - Extract only the requested delivery deadline from the customer
+                  text. The request date, customer job, and event are already
+                  supplied as trusted context and must not be extracted from the
+                  customer wording.
 
                 Return only valid JSON:
                 {{
@@ -1338,13 +1351,14 @@ class OrchestrationAgent(ToolCallingAgent):
                       "clarification_message": ""
                     }}
                   ],
-                  "order_date": "YYYY-MM-DD",
-                  "job": "customer job or unknown",
-                  "event": "event or unknown",
+                  "requested_delivery_date": "YYYY-MM-DD",
                   "needs_clarification": false
                 }}
                 """)
             data = parse_agent_response(response)
+            data["request_date"] = request_date
+            data["job"] = job
+            data["event"] = event
             return validate_extracted_request(data)
 
         @tool
@@ -1374,10 +1388,9 @@ class OrchestrationAgent(ToolCallingAgent):
                     Check if the requested items are available in the inventory.
                     if it is available check the if the current stock is enough to fulfill the requested quantity.
                     if the current stock is not enough to fulfill the requested quantity, calculate the shortage then determine the estimated delivery date for the shortage.
-                    Compare the delivery date with the order date to determine if the shortage can be fulfilled on time.
-                    if there is no shortage, the delivery date is the same as the order date.
+                    if there is no shortage, the delivery date is the same as the request date.
 
-                Return only valid JSON with item_name, exists, requested_quantity, current_stock, enough_stock, shortage, and delivery_date, order_will_be_fulfilled_on_time
+                Return only valid JSON with item_name, exists, requested_quantity, current_stock, enough_stock, shortage, and delivery_date.
                 Use double quotes, JSON booleans, and null where appropriate.
                 """)
             data = parse_agent_response(response)
@@ -1389,7 +1402,6 @@ class OrchestrationAgent(ToolCallingAgent):
                 or "enough_stock" not in data
                 or "shortage" not in data
                 or "delivery_date" not in data
-                or "order_will_be_fulfilled_on_time" not in data
             ):
                 raise ValueError("Missing required fields in response")
             return data
@@ -1431,16 +1443,16 @@ class OrchestrationAgent(ToolCallingAgent):
             response = self.quote_agent.run(f"""
                 The customer wants: "{request_information}"
 
-                Get the pricing for the requested items.
+                Recommend a discount as a decimal between 0 and 1.
                 When searching quote history, include only quotes on or before
                 the request's order_date.
                 Explain the exact pricing logic in pricing_explanation, including:
                 - catalog unit price and base subtotal
                 - selected bulk discount rate and why
                 - relevant quote history and financial context considered
-                - calculation from base subtotal to final total_price
-                Return only valid JSON with item_name, requested_quantity, discount,
-                total_price, and pricing_explanation.
+                - that Python will calculate the final total
+                Return only valid JSON with item_name, requested_quantity,
+                discount, and pricing_explanation.
                 Use double quotes around all keys and string values.
                 """)
             data = parse_agent_response(response)
@@ -1448,15 +1460,26 @@ class OrchestrationAgent(ToolCallingAgent):
                 "item_name" not in data
                 or "requested_quantity" not in data
                 or "discount" not in data
-                or "total_price" not in data
                 or "pricing_explanation" not in data
             ):
                 raise ValueError("Missing required fields in response")
+            discount = data["discount"]
+            if (
+                isinstance(discount, bool)
+                or not isinstance(discount, (int, float))
+                or not 0 <= discount <= 1
+            ):
+                raise ValueError("Discount must be a numeric rate between 0 and 1")
             if (
                 not isinstance(data["pricing_explanation"], str)
                 or not data["pricing_explanation"].strip()
             ):
                 raise ValueError("Pricing explanation must be a non-empty string")
+            data["unit_price"] = catalog_item["unit_price"]
+            data["subtotal"] = round(catalog_item["unit_price"] * quantity, 2)
+            data["total_price"] = round(
+                data["subtotal"] * (1 - float(discount)), 2
+            )
             return data
 
         @tool
@@ -1545,8 +1568,15 @@ class OrchestrationAgent(ToolCallingAgent):
             description="Agent responsible for orchestrating the interactions between other agents.",
         )
 
-    def handle_request(self, request_with_date):
-        processed = self.tools["process_request"](request_with_date)
+    def handle_request(
+        self, request: str, request_date: str, job: str, event: str
+    ):
+        processed = self.tools["process_request"](
+            request=request,
+            request_date=request_date,
+            job=job,
+            event=event,
+        )
         item_results = []
 
         for item in processed["items"]:
@@ -1565,10 +1595,12 @@ class OrchestrationAgent(ToolCallingAgent):
             inventory = self.tools["check_inventory"](
                 item_name=item["item_name"],
                 quantity=item["quantity"],
-                order_date=processed["order_date"],
+                order_date=processed["request_date"],
             )
             inventory["order_will_be_fulfilled_on_time"] = (
-                can_fulfill_by_request_date(inventory, processed["order_date"])
+                can_fulfill_by_delivery_date(
+                    inventory, processed["requested_delivery_date"]
+                )
             )
             if not inventory["order_will_be_fulfilled_on_time"]:
                 item_results.append(
@@ -1578,7 +1610,8 @@ class OrchestrationAgent(ToolCallingAgent):
                         "inventory": inventory,
                         "status": "cannot_deliver_on_time",
                         "message": (
-                            "The item cannot be delivered by the request date. "
+                            "The item cannot be delivered by the requested "
+                            "delivery date. "
                             f"Estimated delivery: {inventory['delivery_date']}."
                         ),
                         "required_next_action": (
@@ -1592,7 +1625,7 @@ class OrchestrationAgent(ToolCallingAgent):
             pricing = self.tools["get_pricing"](
                 item_name=item["item_name"],
                 quantity=item["quantity"],
-                order_date=processed["order_date"],
+                order_date=processed["request_date"],
                 job=processed["job"],
                 event=processed["event"],
             )
@@ -1607,14 +1640,15 @@ class OrchestrationAgent(ToolCallingAgent):
             result["fulfillment"] = self.tools["finalize_order"](
                 item_name=item["item_name"],
                 quantity=item["quantity"],
-                order_date=processed["order_date"],
+                order_date=processed["request_date"],
                 total_price=pricing["total_price"],
             )
             result["status"] = "fulfilled"
             item_results.append(result)
 
         return {
-            "order_date": processed["order_date"],
+            "request_date": processed["request_date"],
+            "requested_delivery_date": processed["requested_delivery_date"],
             "job": processed["job"],
             "event": processed["event"],
             "needs_clarification": processed["needs_clarification"],
@@ -1665,9 +1699,6 @@ def run_test_scenarios():
         print(f"Cash Balance: ${current_cash:.2f}")
         print(f"Inventory Value: ${current_inventory:.2f}")
 
-        # Process request
-        request_with_date = f"{row['request']} (Date of request: {request_date})"
-
         ############
         ############
         ############
@@ -1676,7 +1707,12 @@ def run_test_scenarios():
         ############
         ############
 
-        response = orchestration_agent.handle_request(request_with_date)
+        response = orchestration_agent.handle_request(
+            request=row["request"],
+            request_date=request_date,
+            job=row["job"],
+            event=row["event"],
+        )
 
         # Update state
         report = generate_financial_report(request_date)

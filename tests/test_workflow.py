@@ -220,7 +220,8 @@ class WorkflowTests(unittest.TestCase):
                     "clarification_message": "No matching catalog item.",
                 },
             ],
-            "order_date": "2025-01-01",
+            "request_date": "2025-01-01",
+            "requested_delivery_date": "2025-01-04",
             "job": "manager",
             "event": "meeting",
             "needs_clarification": True,
@@ -257,7 +258,9 @@ class WorkflowTests(unittest.TestCase):
                 agent.tools["finalize_order"], "forward"
             ) as finalize_order,
         ):
-            result = agent.handle_request("mixed request")
+            result = agent.handle_request(
+                "mixed request", "2025-01-01", "manager", "meeting"
+            )
 
         self.assertTrue(result["needs_clarification"])
         check_inventory.assert_called_once()
@@ -281,7 +284,8 @@ class WorkflowTests(unittest.TestCase):
                     "candidates": [],
                 }
             ],
-            "order_date": "2025-01-05",
+            "request_date": "2025-01-01",
+            "requested_delivery_date": "2025-01-05",
             "job": "manager",
             "event": "meeting",
             "needs_clarification": False,
@@ -326,13 +330,15 @@ class WorkflowTests(unittest.TestCase):
                 },
             ) as finalize_order,
         ):
-            result = agent.handle_request("shortage request")
+            result = agent.handle_request(
+                "shortage request", "2025-01-01", "manager", "meeting"
+            )
 
         get_pricing.assert_called_once()
         finalize_order.assert_called_once()
         self.assertEqual(result["items"][0]["status"], "fulfilled")
 
-    def test_can_fulfill_by_request_date_is_deterministic(self):
+    def test_can_fulfill_by_delivery_date_is_deterministic(self):
         on_time = {
             "exists": True,
             "enough_stock": False,
@@ -340,9 +346,11 @@ class WorkflowTests(unittest.TestCase):
         }
         late = {**on_time, "delivery_date": "2025-01-06"}
         self.assertTrue(
-            project.can_fulfill_by_request_date(on_time, "2025-01-05")
+            project.can_fulfill_by_delivery_date(on_time, "2025-01-05")
         )
-        self.assertFalse(project.can_fulfill_by_request_date(late, "2025-01-05"))
+        self.assertFalse(
+            project.can_fulfill_by_delivery_date(late, "2025-01-05")
+        )
 
     def test_orchestrator_tools_delegate_and_return_structured_responses(self):
         agent = project.OrchestrationAgent(Mock())
@@ -364,7 +372,12 @@ class WorkflowTests(unittest.TestCase):
             (
                 "process_request",
                 "request_processor_agent",
-                {"request": "I need 10 A4 sheets"},
+                {
+                    "request": "I need 10 A4 sheets by 2025-01-10",
+                    "request_date": "2025-01-01",
+                    "job": "manager",
+                    "event": "meeting",
+                },
                 {
                     "items": [
                         {
@@ -377,7 +390,8 @@ class WorkflowTests(unittest.TestCase):
                             "clarification_message": "",
                         }
                     ],
-                    "order_date": "2025-01-01",
+                    "request_date": "2025-01-01",
+                    "requested_delivery_date": "2025-01-10",
                     "job": "manager",
                     "event": "meeting",
                     "needs_clarification": False,
@@ -409,6 +423,8 @@ class WorkflowTests(unittest.TestCase):
                     "requested_quantity": 10,
                     "discount": 0.1,
                     "total_price": 0.45,
+                    "unit_price": 0.05,
+                    "subtotal": 0.5,
                     "pricing_explanation": "Bulk discount applied to the 0.50 subtotal.",
                 },
                 ("A4 paper", "10"),
@@ -447,7 +463,16 @@ class WorkflowTests(unittest.TestCase):
     def test_orchestrator_tools_reject_invalid_specialist_responses(self):
         agent = project.OrchestrationAgent(Mock())
         cases = [
-            ("process_request", "request_processor_agent", {"request": "10 A4 sheets"}),
+            (
+                "process_request",
+                "request_processor_agent",
+                {
+                    "request": "10 A4 sheets by 2025-01-10",
+                    "request_date": "2025-01-01",
+                    "job": "manager",
+                    "event": "meeting",
+                },
+            ),
             (
                 "check_inventory",
                 "inventory_agent",
@@ -517,7 +542,8 @@ class WorkflowTests(unittest.TestCase):
                         "clarification_message": "Package size is missing.",
                     },
                 ],
-                "order_date": "2025-01-01",
+                "request_date": "2025-01-01",
+                "requested_delivery_date": "2025-01-10",
                 "job": "manager",
                 "event": "meeting",
                 "needs_clarification": False,
@@ -616,7 +642,8 @@ class WorkflowTests(unittest.TestCase):
                         "clarification_message": "",
                     }
                 ],
-                "order_date": "2025-01-01",
+                "request_date": "2025-01-01",
+                "requested_delivery_date": "2025-01-10",
                 "job": "manager",
                 "event": "meeting",
                 "needs_clarification": False,
@@ -935,15 +962,19 @@ class LLMIntegrationTests(unittest.TestCase):
         response = self.agent.tools["process_request"](
             request=(
                 "I need 10 A4 paper for a meeting. "
-                "The request date is 2025-01-01. I am an office manager."
-            )
+                "Please deliver by 2025-01-10."
+            ),
+            request_date="2025-01-01",
+            job="office manager",
+            event="meeting",
         )
 
         self.assertIsInstance(response, dict)
 
         expected_fields = {
             "items",
-            "order_date",
+            "request_date",
+            "requested_delivery_date",
             "job",
             "event",
             "needs_clarification",
@@ -953,7 +984,8 @@ class LLMIntegrationTests(unittest.TestCase):
         self.assertEqual(len(response["items"]), 1)
         self.assertEqual(response["items"][0]["item_name"], "A4 paper")
         self.assertEqual(response["items"][0]["quantity"], 10)
-        self.assertEqual(response["order_date"], "2025-01-01")
+        self.assertEqual(response["request_date"], "2025-01-01")
+        self.assertEqual(response["requested_delivery_date"], "2025-01-10")
         self.assertEqual(response["job"], "office manager")
         self.assertEqual(response["event"], "meeting")
 
@@ -972,7 +1004,6 @@ class LLMIntegrationTests(unittest.TestCase):
             "enough_stock",
             "shortage",
             "delivery_date",
-            "order_will_be_fulfilled_on_time",
         }
         self.assertIsInstance(response, dict)
         self.assertEqual(set(response), expected_fields)
@@ -998,6 +1029,8 @@ class LLMIntegrationTests(unittest.TestCase):
             "discount",
             "total_price",
             "pricing_explanation",
+            "unit_price",
+            "subtotal",
         }
         self.assertIsInstance(response, dict)
         self.assertEqual(set(response), expected_fields)
@@ -1006,6 +1039,10 @@ class LLMIntegrationTests(unittest.TestCase):
         self.assertGreaterEqual(response["discount"], 0)
         self.assertLessEqual(response["discount"], 1)
         self.assertGreater(response["total_price"], 0)
+        self.assertAlmostEqual(
+            response["total_price"],
+            round(response["subtotal"] * (1 - response["discount"]), 2),
+        )
         self.assertIsInstance(response["pricing_explanation"], str)
         self.assertTrue(response["pricing_explanation"].strip())
 

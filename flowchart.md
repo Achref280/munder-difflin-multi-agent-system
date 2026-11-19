@@ -10,25 +10,25 @@ flowchart TD
 
     linkStyle default stroke:#94a3b8,stroke-width:2px
 
-    Request([Customer request and request date]):::startend
+    Request([Customer request, trusted request date,<br/>job, and event]):::startend
     Result([Per-item result and final summary]):::startend
     Clarification([Return only the problematic item<br/>for clarification]):::human
     Late([Return cannot_deliver_on_time<br/>for this item]):::human
     DB[(Inventory, historical requests,<br/>quotes, and transactions)]:::memory
 
     Processor[Request Processor Agent]:::agent
-    StructuredFinal[Structured final_answer schema]:::tool
+    StructuredFinal[Structured final_answer with<br/>requested delivery deadline]:::tool
     Validate[Validate exact catalog item,<br/>quantity, date, and candidates]:::tool
     ClarificationGate{Item needs clarification?}:::decision
 
     InventoryAgent[Inventory Agent]:::agent
     StockTool[get_stock_inventory]:::tool
-    OnTimeGate{Can shortage arrive<br/>by request date?}:::decision
+    OnTimeGate{Can shortage arrive<br/>by requested delivery date?}:::decision
 
     QuoteAgent[Quote Agent]:::agent
     HistoryTool[search_quote_history<br/>as of request date]:::tool
     FinanceTools[get_cash_balance and<br/>financial report]:::tool
-    Pricing[Quote with discount,<br/>total, and explanation]:::tool
+    Pricing[LLM discount recommendation<br/>+ Python-calculated total]:::tool
 
     OrderAgent[Order Agent]:::agent
     ExecuteOrder[execute_order]:::tool
